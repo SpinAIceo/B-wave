@@ -1,0 +1,94 @@
+# B-Wave PKI — OpenSSL Configuration
+# Used by init-ca.sh, issue-vessel-cert.sh, issue-tablet-cert.sh
+
+[ ca ]
+default_ca = bwave_ca
+
+[ bwave_ca ]
+dir               = ./ca
+certs             = $dir/certs
+new_certs_dir     = $dir/newcerts
+database          = $dir/index.txt
+serial            = $dir/serial
+RANDFILE          = $dir/.rand
+private_key       = $dir/private/ca-intermediate-key.pem
+certificate       = $dir/certs/ca-intermediate.pem
+crl               = $dir/crl/crl.pem
+crl_dir           = $dir/crl
+crlnumber         = $dir/crlnumber
+default_days      = 825
+default_crl_days  = 30
+default_md        = sha384
+preserve          = no
+policy            = policy_strict
+
+[ policy_strict ]
+countryName            = match
+stateOrProvinceName    = match
+organizationName       = match
+organizationalUnitName = optional
+commonName             = supplied
+
+[ policy_loose ]
+countryName            = optional
+stateOrProvinceName    = optional
+organizationName       = optional
+organizationalUnitName = optional
+commonName             = supplied
+
+# ── Root CA certificate request ───────────────────────────────────
+
+[ req ]
+default_bits       = 4096
+default_md         = sha384
+distinguished_name = req_distinguished_name
+string_mask        = utf8only
+x509_extensions    = v3_ca
+prompt             = no
+
+[ req_distinguished_name ]
+C  = KR
+ST = Gyeonggi-do
+L  = Seongnam
+O  = Spinai Co., Ltd.
+OU = B-Wave Maritime Security
+CN = B-Wave Root CA
+
+# ── Certificate extensions ────────────────────────────────────────
+
+[ v3_ca ]
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints       = critical,CA:true
+keyUsage               = critical,digitalSignature,cRLSign,keyCertSign
+
+[ v3_intermediate_ca ]
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints       = critical,CA:true,pathlen:0
+keyUsage               = critical,digitalSignature,cRLSign,keyCertSign
+
+[ server_cert ]
+# For edge server certificates (mTLS server side)
+basicConstraints       = CA:FALSE
+nsCertType             = server
+nsComment              = "B-Wave Edge Server Certificate"
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid,issuer:always
+keyUsage               = critical,digitalSignature,keyEncipherment
+extendedKeyUsage       = serverAuth
+crlDistributionPoints  = URI:http://pki.bwave.spinai.com/crl/intermediate.crl.pem
+
+[ client_cert ]
+# For tablet/BYOD client certificates (mTLS client side)
+basicConstraints       = CA:FALSE
+nsCertType             = client
+nsComment              = "B-Wave Tablet Client Certificate"
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid,issuer:always
+keyUsage               = critical,digitalSignature
+extendedKeyUsage       = clientAuth
+crlDistributionPoints  = URI:http://pki.bwave.spinai.com/crl/intermediate.crl.pem
+
+[ crl_ext ]
+authorityKeyIdentifier = keyid:always

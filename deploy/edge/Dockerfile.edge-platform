@@ -1,0 +1,33 @@
+FROM rust:1.78-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config libssl-dev protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY packages/edge-platform/ .
+
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates libssl3 curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -r -s /bin/false bwave
+WORKDIR /opt/bwave
+
+COPY --from=builder /build/target/release/bwave-edge-platform /opt/bwave/bin/
+RUN mkdir -p /opt/bwave/data /opt/bwave/certs /opt/bwave/configs \
+    && chown -R bwave:bwave /opt/bwave
+
+USER bwave
+
+ENV BWAVE_DATA_DIR=/opt/bwave/data
+ENV BWAVE_CERT_DIR=/opt/bwave/certs
+ENV RUST_LOG=bwave_edge_platform=info
+
+EXPOSE 50052 8080
+
+ENTRYPOINT ["/opt/bwave/bin/bwave-edge-platform"]

@@ -1,0 +1,68 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: bwave-postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-bwave}
+      POSTGRES_USER: ${POSTGRES_USER:-bwave}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "5432:5432"
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bwave}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bwave-shore-net
+
+  fleet-backend:
+    build:
+      context: ../../
+      dockerfile: deploy/shore/Dockerfile.fleet-backend
+    container_name: bwave-fleet-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-bwave}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bwave}
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in .env}
+      - BWAVE_LOG_LEVEL=INFO
+      - CORS_ORIGINS=http://localhost,http://localhost:80,https://fleet.bwave.spinai.com
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - bwave-shore-net
+
+  fleet-frontend:
+    build:
+      context: ../../
+      dockerfile: deploy/shore/Dockerfile.fleet-frontend
+    container_name: bwave-fleet-frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - fleet-backend
+    restart: always
+    networks:
+      - bwave-shore-net
+
+networks:
+  bwave-shore-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+    driver: local

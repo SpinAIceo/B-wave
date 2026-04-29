@@ -1,0 +1,40 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+COPY packages/fleet-view/frontend/package.json packages/fleet-view/frontend/package-lock.json* ./
+RUN npm install
+
+COPY packages/fleet-view/frontend/ .
+RUN npm run build
+
+FROM nginx:1.25-alpine
+
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+RUN cat > /etc/nginx/conf.d/default.conf << 'NGINX'
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location /api/ {
+        proxy_pass http://fleet-backend:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /health {
+        proxy_pass http://fleet-backend:8000;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+NGINX
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

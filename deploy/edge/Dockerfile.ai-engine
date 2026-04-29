@@ -1,0 +1,28 @@
+FROM python:3.11-slim AS base
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY packages/ai-engine/pyproject.toml .
+RUN pip install --no-cache-dir \
+    grpcio>=1.64 \
+    onnxruntime>=1.18 \
+    opencv-python-headless>=4.10 \
+    numpy>=1.26 \
+    Pillow>=10.3 \
+    fastapi>=0.111 \
+    uvicorn>=0.30
+
+COPY shared/gen/python/ /app/shared/gen/python/
+COPY packages/ai-engine/src/ /app/src/
+
+ENV PYTHONPATH=/app/src:/app/shared/gen/python
+ENV BWAVE_MODEL_PATH=/opt/bwave/models/defect-yolov8.onnx
+ENV BWAVE_LOG_LEVEL=INFO
+
+EXPOSE 50051
+
+ENTRYPOINT ["python", "-m", "ai_engine.inference.server"]

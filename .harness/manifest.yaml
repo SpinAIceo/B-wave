@@ -44,8 +44,9 @@ stages:
     depends_on: [stage-03-edge-platform]
 
   stage-07-poc-deploy:
-    status: not_started
-    owner: all
+    status: in_progress
+    owner: team-e-infra
+    started: "2026-04-29"
     depends_on: [stage-05-integration, stage-06-fleet-view]
 
 team_assignments:

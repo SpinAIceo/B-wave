@@ -1,0 +1,98 @@
+version: "3.9"
+
+services:
+  ai-engine:
+    build:
+      context: ../../
+      dockerfile: deploy/edge/Dockerfile.ai-engine
+    container_name: bwave-ai-engine
+    ports:
+      - "50051:50051"
+    volumes:
+      - bwave-models:/opt/bwave/models:ro
+      - bwave-data:/opt/bwave/data
+    environment:
+      - BWAVE_MODEL_PATH=/opt/bwave/models/defect-yolov8.onnx
+      - BWAVE_LOG_LEVEL=INFO
+      - BWAVE_GRPC_PORT=50051
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "1.0"
+          memory: 2G
+    restart: always
+    healthcheck:
+      test: ["CMD", "python", "-c", "import grpc; ch=grpc.insecure_channel('localhost:50051'); grpc.channel_ready_future(ch).result(timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - bwave-edge-net
+
+  edge-platform:
+    build:
+      context: ../../
+      dockerfile: deploy/edge/Dockerfile.edge-platform
+    container_name: bwave-edge-platform
+    ports:
+      - "50052:50052"
+      - "8080:8080"
+    volumes:
+      - bwave-data:/opt/bwave/data
+      - bwave-certs:/opt/bwave/certs:ro
+      - ./configs:/opt/bwave/configs:ro
+    environment:
+      - BWAVE_AI_ENGINE_ADDR=ai-engine:50051
+      - BWAVE_DATA_DIR=/opt/bwave/data
+      - BWAVE_CERT_DIR=/opt/bwave/certs
+      - BWAVE_LOG_LEVEL=info
+      - RUST_LOG=bwave_edge_platform=info
+    depends_on:
+      ai-engine:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - bwave-edge-net
+
+  mesh-monitor:
+    image: alpine:3.19
+    container_name: bwave-mesh-monitor
+    volumes:
+      - ../../packages/mesh-network/configs:/opt/bwave/mesh:ro
+      - ../../packages/mesh-network/scripts:/opt/bwave/scripts:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        apk add --no-cache iw wireless-tools
+        echo "B-Wave Mesh Monitor starting..."
+        while true; do
+          echo "[$(date -Iseconds)] Mesh monitor heartbeat"
+          if command -v iw >/dev/null 2>&1; then
+            iw dev 2>/dev/null || echo "No wireless interfaces found"
+          fi
+          sleep 60
+        done
+    network_mode: host
+    restart: unless-stopped
+
+networks:
+  bwave-edge-net:
+    driver: bridge
+
+volumes:
+  bwave-data:
+    driver: local
+  bwave-models:
+    driver: local
+  bwave-certs:
+    driver: local
