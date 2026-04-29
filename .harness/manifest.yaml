@@ -1,7 +1,7 @@
 project: bwave-psc-scanner
 version: "1.0"
-current_stage: stage-01-foundation
-status: stage_complete
+current_stage: stage-02-ai-engine
+status: in_progress
 created: "2026-04-29"
 
 stages:
@@ -14,13 +14,15 @@ stages:
     depends_on: []
 
   stage-02-ai-engine:
-    status: ready
+    status: in_progress
     owner: team-a-vision
+    started: "2026-04-29"
     depends_on: [stage-01-foundation]
 
   stage-03-edge-platform:
-    status: ready
+    status: in_progress
     owner: team-b-edge
+    started: "2026-04-29"
     depends_on: [stage-01-foundation]
 
   stage-04-mobile-app:
