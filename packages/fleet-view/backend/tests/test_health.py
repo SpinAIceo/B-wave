@@ -9,3 +9,8 @@ def test_health():
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
+
+
+def test_health_returns_json():
+    resp = client.get("/health")
+    assert resp.headers["content-type"] == "application/json"
