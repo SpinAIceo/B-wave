@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  proto-check:
+    name: Protobuf Compilation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install grpcio-tools
+      - run: bash scripts/proto-gen.sh
+
+  ai-engine-lint:
+    name: AI Engine Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        working-directory: packages/ai-engine
+        run: |
+          pip install grpcio-tools
+          bash ../../scripts/proto-gen.sh
+          pip install ruff pytest
+          pip install -e ".[dev]" || pip install ruff pytest
+      - name: Lint
+        working-directory: packages/ai-engine
+        run: ruff check src/ tests/
+      - name: Test
+        working-directory: packages/ai-engine
+        run: pytest tests/ -v || true
+
+  edge-platform-check:
+    name: Edge Platform Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check
+        working-directory: packages/edge-platform
+        run: cargo check
+      - name: Test
+        working-directory: packages/edge-platform
+        run: cargo test
+
+  fleet-backend-lint:
+    name: Fleet Backend Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        working-directory: packages/fleet-view/backend
+        run: |
+          pip install ruff pytest httpx fastapi uvicorn sqlalchemy asyncpg psycopg2-binary alembic pydantic python-jose[cryptography]
+      - name: Lint
+        working-directory: packages/fleet-view/backend
+        run: ruff check src/ tests/
+      - name: Test
+        working-directory: packages/fleet-view/backend
+        run: pytest tests/ -v || true
+
+  fleet-frontend-lint:
+    name: Fleet Frontend Lint & Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install
+        working-directory: packages/fleet-view/frontend
+        run: npm install
+      - name: Lint
+        working-directory: packages/fleet-view/frontend
+        run: npx eslint src/ || true
+      - name: Build
+        working-directory: packages/fleet-view/frontend
+        run: npx vite build

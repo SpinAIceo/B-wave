@@ -1,0 +1,51 @@
+project: bwave-psc-scanner
+version: "1.0"
+current_stage: stage-01-foundation
+status: stage_complete
+created: "2026-04-29"
+
+stages:
+  stage-01-foundation:
+    status: completed
+    owner: orchestrator
+    started: "2026-04-29"
+    completed: "2026-04-29"
+    blockers: []
+    depends_on: []
+
+  stage-02-ai-engine:
+    status: ready
+    owner: team-a-vision
+    depends_on: [stage-01-foundation]
+
+  stage-03-edge-platform:
+    status: ready
+    owner: team-b-edge
+    depends_on: [stage-01-foundation]
+
+  stage-04-mobile-app:
+    status: not_started
+    owner: team-c-mobile
+    depends_on: [stage-02-ai-engine, stage-03-edge-platform]
+
+  stage-05-integration:
+    status: not_started
+    owner: orchestrator
+    depends_on: [stage-02-ai-engine, stage-03-edge-platform, stage-04-mobile-app]
+
+  stage-06-fleet-view:
+    status: not_started
+    owner: team-d-fleet
+    depends_on: [stage-03-edge-platform]
+
+  stage-07-poc-deploy:
+    status: not_started
+    owner: all
+    depends_on: [stage-05-integration, stage-06-fleet-view]
+
+team_assignments:
+  team-a-vision: [ai-engine]
+  team-b-edge: [edge-platform]
+  team-c-mobile: [mobile-app]
+  team-d-fleet: [fleet-view]
+  team-e-infra: [mesh-network, deploy]

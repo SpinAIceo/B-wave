@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package bwave.v1;
+
+option java_package = "com.spinai.bwave.v1";
+option go_package = "github.com/spinai/bwave/gen/go/bwave/v1";
+
+import "bwave/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+// SyncService: Team-B (Edge) ↔ Team-D (Fleet View)
+service SyncService {
+  rpc PushInspectionData(stream InspectionRecord) returns (SyncAck);
+  rpc PullUpdates(UpdateRequest) returns (stream UpdatePackage);
+}
+
+message InspectionRecord {
+  string id = 1;
+  string vessel_id = 2;
+  string inspector_id = 3;
+  string port_of_inspection = 4;
+  MoURegion mou_region = 5;
+  google.protobuf.Timestamp started_at = 6;
+  google.protobuf.Timestamp completed_at = 7;
+  repeated DetectionRecord detections = 8;
+  repeated ChecklistEntry checklist = 9;
+}
+
+message DetectionRecord {
+  string id = 1;
+  string inspection_id = 2;
+  bytes image_data = 3;
+  repeated Defect defects = 4;
+  string model_version = 5;
+  float inference_time_ms = 6;
+  google.protobuf.Timestamp timestamp = 7;
+}
+
+message ChecklistEntry {
+  string item_id = 1;
+  string category = 2;
+  string description = 3;
+  ChecklistItemStatus status = 4;
+  repeated string detection_ids = 5;
+  string notes = 6;
+}
+
+message SyncAck {
+  bool success = 1;
+  int32 records_received = 2;
+  repeated string failed_ids = 3;
+  google.protobuf.Timestamp synced_at = 4;
+}
+
+message UpdateRequest {
+  string vessel_id = 1;
+  string edge_server_id = 2;
+  google.protobuf.Timestamp last_sync = 3;
+}
+
+message UpdatePackage {
+  string package_type = 1;
+  bytes payload = 2;
+  string version = 3;
+  google.protobuf.Timestamp created_at = 4;
+}

@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package bwave.v1;
+
+option java_package = "com.spinai.bwave.v1";
+option go_package = "github.com/spinai/bwave/gen/go/bwave/v1";
+
+import "bwave/v1/common.proto";
+
+// EdgeInferenceService: Team-A (AI Engine) ↔ Team-C (Mobile App)
+service EdgeInferenceService {
+  rpc DetectDefects(DetectRequest) returns (DetectResponse);
+  rpc GetModelInfo(Empty) returns (ModelInfo);
+  rpc HealthCheck(Empty) returns (HealthStatus);
+}
+
+message DetectRequest {
+  bytes image_data = 1;
+  int32 image_width = 2;
+  int32 image_height = 3;
+  string inspection_id = 4;
+}
+
+message DetectResponse {
+  repeated Defect defects = 1;
+  float inference_time_ms = 2;
+  string model_version = 3;
+}
+
+message ModelInfo {
+  string model_name = 1;
+  string model_version = 2;
+  repeated string supported_defect_types = 3;
+  int32 input_width = 4;
+  int32 input_height = 5;
+  string runtime = 6;
+}

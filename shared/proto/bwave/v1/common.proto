@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package bwave.v1;
+
+option java_package = "com.spinai.bwave.v1";
+option go_package = "github.com/spinai/bwave/gen/go/bwave/v1";
+
+// Shared enums
+
+enum DefectType {
+  DEFECT_TYPE_UNSPECIFIED = 0;
+  DEFECT_TYPE_RUST = 1;
+  DEFECT_TYPE_DAMAGE = 2;
+  DEFECT_TYPE_LEAK = 3;
+  DEFECT_TYPE_MISSING_LABEL = 4;
+  DEFECT_TYPE_CARGO_LASHING = 5;
+}
+
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  SEVERITY_LOW = 1;
+  SEVERITY_MEDIUM = 2;
+  SEVERITY_HIGH = 3;
+  SEVERITY_CRITICAL = 4;
+}
+
+enum ChecklistItemStatus {
+  CHECKLIST_ITEM_STATUS_UNSPECIFIED = 0;
+  CHECKLIST_ITEM_STATUS_PASS = 1;
+  CHECKLIST_ITEM_STATUS_FAIL = 2;
+  CHECKLIST_ITEM_STATUS_NOT_CHECKED = 3;
+}
+
+enum MoURegion {
+  MOU_REGION_UNSPECIFIED = 0;
+  MOU_REGION_TOKYO = 1;
+  MOU_REGION_PARIS = 2;
+  MOU_REGION_INDIAN_OCEAN = 3;
+  MOU_REGION_ABUJA = 4;
+  MOU_REGION_BLACK_SEA = 5;
+  MOU_REGION_CARIBBEAN = 6;
+  MOU_REGION_MEDITERRANEAN = 7;
+  MOU_REGION_RIYADH = 8;
+  MOU_REGION_VINA_DEL_MAR = 9;
+  MOU_REGION_USCG = 10;
+}
+
+// Shared messages
+
+message BoundingBox {
+  float x_min = 1;
+  float y_min = 2;
+  float x_max = 3;
+  float y_max = 4;
+}
+
+message Defect {
+  BoundingBox bbox = 1;
+  DefectType defect_type = 2;
+  float confidence = 3;
+  string psc_code = 4;
+  Severity severity = 5;
+}
+
+message Empty {}
+
+message HealthStatus {
+  bool healthy = 1;
+  string version = 2;
+  float uptime_seconds = 3;
+}

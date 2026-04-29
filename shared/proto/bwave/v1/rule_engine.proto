@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package bwave.v1;
+
+option java_package = "com.spinai.bwave.v1";
+option go_package = "github.com/spinai/bwave/gen/go/bwave/v1";
+
+import "bwave/v1/common.proto";
+
+// RuleEngineService: Team-A (AI) ↔ Team-B (Edge Platform)
+service RuleEngineService {
+  rpc MapToRegulation(DefectList) returns (ViolationReport);
+  rpc GetPortInspectionFocus(PortInfo) returns (InspectionChecklist);
+}
+
+message DefectList {
+  repeated Defect defects = 1;
+  string vessel_id = 2;
+}
+
+message PSCViolation {
+  string psc_code = 1;
+  string category = 2;
+  string description = 3;
+  Severity severity = 4;
+  bool cic_target_2026 = 5;
+  repeated DefectType related_defect_types = 6;
+  string recommended_action = 7;
+}
+
+message ViolationReport {
+  repeated PSCViolation violations = 1;
+  int32 total_violations = 2;
+  int32 critical_count = 3;
+}
+
+message PortInfo {
+  string port_name = 1;
+  string country_code = 2;
+  MoURegion mou_region = 3;
+}
+
+message ChecklistItem {
+  string item_id = 1;
+  string category = 2;
+  string description = 3;
+  ChecklistItemStatus status = 4;
+  bool is_cic_focus = 5;
+}
+
+message InspectionChecklist {
+  string port_name = 1;
+  MoURegion mou_region = 2;
+  repeated ChecklistItem items = 3;
+  repeated string cic_focus_areas = 4;
+}
