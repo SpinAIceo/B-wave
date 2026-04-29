@@ -26,8 +26,9 @@ stages:
     depends_on: [stage-01-foundation]
 
   stage-04-mobile-app:
-    status: not_started
+    status: in_progress
     owner: team-c-mobile
+    started: "2026-04-29"
     depends_on: [stage-02-ai-engine, stage-03-edge-platform]
 
   stage-05-integration:
