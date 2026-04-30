@@ -114,8 +114,16 @@ class ShipDefectDataset:
         labels = []
         for line in label_path.read_text().strip().splitlines():
             parts = line.strip().split()
-            if len(parts) == 5:
-                labels.append([float(x) for x in parts])
+            if len(parts) < 5:
+                continue
+            try:
+                vals = [float(x) for x in parts[:5]]
+            except ValueError:
+                continue
+            cls_id = int(vals[0])
+            if cls_id < 0 or not all(0.0 <= v <= 1.0 for v in vals[1:5]):
+                continue
+            labels.append(vals)
         return labels
 
     def generate_yolo_yaml(self, output_path: str | Path) -> Path:

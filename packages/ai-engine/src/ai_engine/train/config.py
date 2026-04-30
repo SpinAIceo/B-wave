@@ -22,7 +22,7 @@ class AugmentationConfig:
 
 @dataclass
 class TrainConfig:
-    model_name: str = "yolov8n.pt"
+    model_name: str = "yolo26s.pt"
     num_classes: int = 5
     class_names: list[str] = field(default_factory=lambda: list(DEFECT_CLASSES))
     image_size: int = 640

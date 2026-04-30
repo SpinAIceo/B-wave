@@ -22,7 +22,7 @@ class Detection:
 
 
 class InferenceEngine:
-    """Unified inference engine supporting ONNX and PyTorch YOLOv8 models."""
+    """Unified inference engine supporting ONNX, TensorRT, and PyTorch YOLO models."""
 
     def __init__(self, model_path: str | Path, device: str = "cpu"):
         self.model_path = Path(model_path)
@@ -33,6 +33,7 @@ class InferenceEngine:
         self._image_size = 640
         self._model_version = "unknown"
         self._loaded = False
+        self._is_end2end = False
 
         if self.model_path.exists():
             self._load_model()
@@ -54,22 +55,42 @@ class InferenceEngine:
         return "none"
 
     def _load_model(self) -> None:
-        if self.model_path.suffix == ".onnx":
+        suffix = self.model_path.suffix.lower()
+        if suffix == ".onnx":
             self._load_onnx()
+        elif suffix == ".engine":
+            self._load_tensorrt()
         else:
             self._load_pytorch()
 
     def _load_onnx(self) -> None:
         import onnxruntime as ort
 
+        available = ort.get_available_providers()
         providers = ["CPUExecutionProvider"]
-        if self.device != "cpu":
+        if self.device != "cpu" and "CUDAExecutionProvider" in available:
             providers.insert(0, "CUDAExecutionProvider")
+        elif self.device != "cpu" and "TensorrtExecutionProvider" in available:
+            providers.insert(0, "TensorrtExecutionProvider")
 
         self._session = ort.InferenceSession(str(self.model_path), providers=providers)
         input_shape = self._session.get_inputs()[0].shape
         if isinstance(input_shape[2], int):
             self._image_size = input_shape[2]
+
+        outputs = self._session.get_outputs()
+        if len(outputs) > 0:
+            out_shape = outputs[0].shape
+            if out_shape and len(out_shape) == 3 and out_shape[-1] == 6:
+                self._is_end2end = True
+
+        self._model_version = self.model_path.stem
+        self._loaded = True
+
+    def _load_tensorrt(self) -> None:
+        from ultralytics import YOLO
+
+        self._pt_model = YOLO(str(self.model_path), task="detect")
         self._model_version = self.model_path.stem
         self._loaded = True
 
@@ -103,6 +124,8 @@ class InferenceEngine:
         input_name = self._session.get_inputs()[0].name
         outputs = self._session.run(None, {input_name: arr})
 
+        if self._is_end2end:
+            return self._parse_end2end_output(outputs[0], orig_w, orig_h, conf_threshold)
         return self._parse_yolo_output(outputs[0], orig_w, orig_h, conf_threshold)
 
     def _predict_pytorch(
@@ -138,6 +161,35 @@ class InferenceEngine:
                     class_name=class_name,
                     confidence=conf,
                 ))
+        return detections
+
+    def _parse_end2end_output(
+        self,
+        output: np.ndarray,
+        orig_w: int,
+        orig_h: int,
+        conf_threshold: float,
+    ) -> list[Detection]:
+        """Parse YOLO26 NMS-free end2end output: [batch, num_dets, 6] = [x1,y1,x2,y2,conf,cls]."""
+        if output.ndim == 3:
+            output = output[0]
+
+        detections: list[Detection] = []
+        for row in output:
+            x1, y1, x2, y2, conf, cls_id = row[:6]
+            if conf < conf_threshold:
+                continue
+            cls_id = int(cls_id)
+            class_name = self.class_names[cls_id] if cls_id < len(self.class_names) else "unknown"
+            detections.append(Detection(
+                x_min=max(0.0, float(x1) / self._image_size),
+                y_min=max(0.0, float(y1) / self._image_size),
+                x_max=min(1.0, float(x2) / self._image_size),
+                y_max=min(1.0, float(y2) / self._image_size),
+                class_id=cls_id,
+                class_name=class_name,
+                confidence=float(conf),
+            ))
         return detections
 
     def _parse_yolo_output(

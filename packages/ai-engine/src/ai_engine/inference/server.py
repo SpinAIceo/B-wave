@@ -8,7 +8,10 @@ from pathlib import Path
 
 import grpc
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "shared" / "gen" / "python"))
+_proto_path = Path(__file__).resolve().parents[4] / "shared" / "gen" / "python"
+if not _proto_path.exists():
+    _proto_path = Path(__file__).resolve().parents[5] / "shared" / "gen" / "python"
+sys.path.insert(0, str(_proto_path))
 
 from bwave.v1 import common_pb2, inference_pb2, inference_pb2_grpc  # noqa: E402
 
@@ -36,8 +39,18 @@ class EdgeInferenceServiceServicer(inference_pb2_grpc.EdgeInferenceServiceServic
             context.set_details("Model not loaded")
             return inference_pb2.DetectResponse()
 
+        if not request.image_data:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details("Empty image data")
+            return inference_pb2.DetectResponse()
+
         start = time.perf_counter()
-        detections = self._engine.predict(request.image_data)
+        try:
+            detections = self._engine.predict(request.image_data)
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Inference failed: {type(e).__name__}")
+            return inference_pb2.DetectResponse()
         elapsed_ms = (time.perf_counter() - start) * 1000
 
         defects = []
@@ -66,7 +79,7 @@ class EdgeInferenceServiceServicer(inference_pb2_grpc.EdgeInferenceServiceServic
 
     def GetModelInfo(self, request, context):
         return inference_pb2.ModelInfo(
-            model_name="bwave-yolov8-defect",
+            model_name="bwave-yolo26-defect",
             model_version=self._engine.model_version,
             supported_defect_types=list(self._engine.class_names),
             input_width=self._engine._image_size,
@@ -123,13 +136,19 @@ def serve(port: int = 50051, model_path: str | None = None):
         EdgeInferenceServiceServicer(engine, mapper), server
     )
 
+    dev_mode = os.environ.get("BWAVE_DEV_MODE", "").lower() in ("1", "true", "yes")
     creds = _load_tls_credentials()
     if creds:
         server.add_secure_port(f"[::]:{port}", creds)
         tls_status = "mTLS" if os.environ.get("BWAVE_TLS_CA") else "TLS"
-    else:
+    elif dev_mode:
         server.add_insecure_port(f"[::]:{port}")
-        tls_status = "INSECURE (set BWAVE_TLS_CERT/KEY to enable TLS)"
+        tls_status = "INSECURE (dev mode)"
+    else:
+        raise RuntimeError(
+            "TLS is required in production. Set BWAVE_TLS_CERT and BWAVE_TLS_KEY, "
+            "or set BWAVE_DEV_MODE=1 for local development."
+        )
 
     server.start()
 

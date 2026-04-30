@@ -54,10 +54,14 @@ def train(config: TrainConfig, data_yaml: str | Path) -> TrainResult:
     if results and hasattr(results, "results_dict"):
         metrics = dict(results.results_dict)
 
+    epochs_done = config.epochs
+    if results and hasattr(results, "epoch"):
+        epochs_done = results.epoch + 1
+
     return TrainResult(
         best_model_path=str(best_path),
         metrics=metrics,
-        epochs_completed=config.epochs,
+        epochs_completed=epochs_done,
     )
 
 
@@ -69,14 +73,16 @@ def evaluate(model_path: str | Path, data_yaml: str | Path) -> EvalResult:
     results: Any = model.val(data=str(data_yaml))
 
     per_class: dict[str, dict[str, float]] = {}
-    if hasattr(results, "names") and hasattr(results, "maps"):
+    box = getattr(results, "box", results)
+    if hasattr(box, "maps") and hasattr(results, "names"):
         for i, name in results.names.items():
-            per_class[name] = {"map50_95": float(results.maps[i])}
+            if i < len(box.maps):
+                per_class[name] = {"map50_95": float(box.maps[i])}
 
     return EvalResult(
-        map50=float(getattr(results, "map50", 0.0)),
-        map50_95=float(getattr(results, "map", 0.0)),
-        precision=float(getattr(results, "mp", 0.0)),
-        recall=float(getattr(results, "mr", 0.0)),
+        map50=float(getattr(box, "map50", 0.0)),
+        map50_95=float(getattr(box, "map", 0.0)),
+        precision=float(getattr(box, "mp", 0.0)),
+        recall=float(getattr(box, "mr", 0.0)),
         per_class=per_class,
     )
