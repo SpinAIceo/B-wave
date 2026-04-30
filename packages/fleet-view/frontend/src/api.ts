@@ -6,14 +6,18 @@ import type {
 } from './types';
 
 const API_BASE = '/api/v1';
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
-async function fetchOrMock<T>(path: string, mockData: T): Promise<T> {
+async function fetchOrMock<T>(fetcher: () => Promise<T>, mockData: T): Promise<T> {
   try {
-    const res = await fetch(`${API_BASE}${path}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return (await res.json()) as T;
-  } catch {
-    return mockData;
+    const result = await fetcher();
+    return result;
+  } catch (e) {
+    if (USE_MOCKS) {
+      console.warn('[dev] API unreachable, using mock data');
+      return mockData;
+    }
+    throw e;
   }
 }
 
@@ -64,28 +68,50 @@ const MOCK_OVERVIEW: DashboardOverview = {
 };
 
 export function fetchVessels(): Promise<Vessel[]> {
-  return fetchOrMock('/vessels', MOCK_VESSELS);
+  return fetchOrMock(
+    () => fetch(`${API_BASE}/vessels`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+    MOCK_VESSELS,
+  );
 }
 
 export function fetchVessel(id: string): Promise<Vessel | undefined> {
-  return fetchOrMock(`/vessels/${id}`, MOCK_VESSELS.find(v => v.id === id));
+  return fetchOrMock(
+    () => fetch(`${API_BASE}/vessels/${id}`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+    MOCK_VESSELS.find(v => v.id === id),
+  );
 }
 
 export function fetchDashboardOverview(): Promise<DashboardOverview> {
-  return fetchOrMock('/dashboard/overview', MOCK_OVERVIEW);
+  return fetchOrMock(
+    () => fetch(`${API_BASE}/dashboard/overview`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+    MOCK_OVERVIEW,
+  );
 }
 
 export function fetchInspections(vesselId?: string): Promise<Inspection[]> {
   const filtered = vesselId
     ? MOCK_INSPECTIONS.filter(i => i.vesselId === vesselId)
     : MOCK_INSPECTIONS;
-  return fetchOrMock(`/vessels/${vesselId ?? 'all'}/inspections`, filtered);
+  return fetchOrMock(
+    () => fetch(`${API_BASE}/vessels/${vesselId ?? 'all'}/inspections`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+    filtered,
+  );
 }
 
-export function fetchDetections(_inspectionId: string): Promise<Detection[]> {
-  return fetchOrMock(`/inspections/${_inspectionId}/detections`, []);
+export function fetchDetections(inspectionId: string): Promise<Detection[]> {
+  return fetchOrMock(
+    () => fetch(`${API_BASE}/inspections/${inspectionId}/detections`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+    [],
+  );
 }
 
 export function triggerReport(vesselId: string, type: string): Promise<{ reportId: string }> {
-  return fetchOrMock(`/reports/generate`, { reportId: `RPT-${vesselId}-${type}-${Date.now()}` });
+  return fetchOrMock(
+    () => fetch(`${API_BASE}/reports/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vessel_id: vesselId, report_type: type }),
+    }).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+    { reportId: `RPT-${vesselId}-${type}-${Date.now()}` },
+  );
 }

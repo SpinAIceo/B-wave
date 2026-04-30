@@ -82,6 +82,25 @@ class EdgeInferenceServiceServicer(inference_pb2_grpc.EdgeInferenceServiceServic
         )
 
 
+def _load_tls_credentials() -> grpc.ServerCredentials | None:
+    cert_path = os.environ.get("BWAVE_TLS_CERT")
+    key_path = os.environ.get("BWAVE_TLS_KEY")
+    ca_path = os.environ.get("BWAVE_TLS_CA")
+
+    if not (cert_path and key_path):
+        return None
+
+    cert = Path(cert_path).read_bytes()
+    key = Path(key_path).read_bytes()
+    ca = Path(ca_path).read_bytes() if ca_path else None
+
+    return grpc.ssl_server_credentials(
+        [(key, cert)],
+        root_certificates=ca,
+        require_client_auth=ca is not None,
+    )
+
+
 def serve(port: int = 50051, model_path: str | None = None):
     if model_path is None:
         model_path = os.environ.get("BWAVE_MODEL_PATH", "models/bwave-defect.onnx")
@@ -89,15 +108,33 @@ def serve(port: int = 50051, model_path: str | None = None):
     engine = InferenceEngine(model_path)
     mapper = PSCCodeMapper()
 
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
+    max_workers = int(os.environ.get("BWAVE_GRPC_WORKERS", "4"))
+    max_concurrent = int(os.environ.get("BWAVE_GRPC_MAX_CONCURRENT", "10"))
+
+    server = grpc.server(
+        futures.ThreadPoolExecutor(max_workers=max_workers),
+        maximum_concurrent_rpcs=max_concurrent,
+        options=[
+            ("grpc.max_receive_message_length", 10 * 1024 * 1024),  # 10MB
+            ("grpc.max_send_message_length", 10 * 1024 * 1024),
+        ],
+    )
     inference_pb2_grpc.add_EdgeInferenceServiceServicer_to_server(
         EdgeInferenceServiceServicer(engine, mapper), server
     )
-    server.add_insecure_port(f"[::]:{port}")
+
+    creds = _load_tls_credentials()
+    if creds:
+        server.add_secure_port(f"[::]:{port}", creds)
+        tls_status = "mTLS" if os.environ.get("BWAVE_TLS_CA") else "TLS"
+    else:
+        server.add_insecure_port(f"[::]:{port}")
+        tls_status = "INSECURE (set BWAVE_TLS_CERT/KEY to enable TLS)"
+
     server.start()
 
-    status = "ready" if engine.is_loaded else "no model (waiting for BWAVE_MODEL_PATH)"
-    print(f"EdgeInferenceService on port {port} — {status}")
+    model_status = "ready" if engine.is_loaded else "no model"
+    print(f"EdgeInferenceService on port {port} — {model_status} — {tls_status}")
     server.wait_for_termination()
 
 

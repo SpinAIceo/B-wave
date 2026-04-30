@@ -7,7 +7,7 @@ services:
       dockerfile: deploy/edge/Dockerfile.ai-engine
     container_name: bwave-ai-engine
     ports:
-      - "50051:50051"
+      - "${EDGE_BIND_IP:-127.0.0.1}:50051:50051"
     volumes:
       - bwave-models:/opt/bwave/models:ro
       - bwave-data:/opt/bwave/data
@@ -39,8 +39,8 @@ services:
       dockerfile: deploy/edge/Dockerfile.edge-platform
     container_name: bwave-edge-platform
     ports:
-      - "50052:50052"
-      - "8080:8080"
+      - "${EDGE_BIND_IP:-127.0.0.1}:50052:50052"
+      - "${EDGE_BIND_IP:-127.0.0.1}:8080:8080"
     volumes:
       - bwave-data:/opt/bwave/data
       - bwave-certs:/opt/bwave/certs:ro

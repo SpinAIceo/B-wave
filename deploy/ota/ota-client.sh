@@ -89,8 +89,36 @@ if [[ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]]; then
 fi
 log "Integrity verified (SHA-256 match)."
 
-# TODO: GPG signature verification
-# gpg --verify "${PACKAGE_FILE}.sig" "$PACKAGE_FILE"
+# ── Step 4b: Verify GPG signature (mandatory) ────────────────────
+
+SIGNATURE_FILE="${PACKAGE_FILE}.sig"
+curl -sf -o "$SIGNATURE_FILE" "${OTA_SERVER}/api/v1/updates/download/${UPDATE_ID}.sig" || {
+    log "CRITICAL: Signature file download failed. Rejecting update."
+    rm -rf "$DOWNLOAD_DIR"
+    curl -sf -X POST "${OTA_SERVER}/api/v1/updates/report" \
+        -H "Content-Type: application/json" \
+        -d "{\"vessel_id\":\"${VESSEL_ID}\",\"edge_server_id\":\"${EDGE_SERVER_ID}\",\"update_id\":\"${UPDATE_ID}\",\"status\":\"FAILED\",\"error_message\":\"Signature download failed\"}" \
+        >/dev/null 2>&1 || true
+    exit 1
+}
+
+GPG_KEYRING="${INSTALL_DIR}/certs/bwave-release.gpg"
+if [[ ! -f "$GPG_KEYRING" ]]; then
+    log "CRITICAL: GPG release keyring not found at ${GPG_KEYRING}. Cannot verify update."
+    rm -rf "$DOWNLOAD_DIR"
+    exit 1
+fi
+
+gpg --no-default-keyring --keyring "$GPG_KEYRING" --verify "$SIGNATURE_FILE" "$PACKAGE_FILE" 2>/dev/null || {
+    log "CRITICAL: GPG signature verification FAILED. Update rejected — possible tampering."
+    rm -rf "$DOWNLOAD_DIR"
+    curl -sf -X POST "${OTA_SERVER}/api/v1/updates/report" \
+        -H "Content-Type: application/json" \
+        -d "{\"vessel_id\":\"${VESSEL_ID}\",\"edge_server_id\":\"${EDGE_SERVER_ID}\",\"update_id\":\"${UPDATE_ID}\",\"status\":\"FAILED\",\"error_message\":\"GPG signature verification failed\"}" \
+        >/dev/null 2>&1 || true
+    exit 1
+}
+log "GPG signature verified."
 
 # ── Step 5: Create backup ─────────────────────────────────────────
 

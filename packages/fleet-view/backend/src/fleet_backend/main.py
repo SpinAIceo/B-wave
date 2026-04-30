@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException
+import os
+
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .models import (
@@ -17,10 +19,14 @@ from .webhooks import WebhookManager
 
 app = FastAPI(title="B-Wave Fleet View", version="0.1.0")
 
+_cors_origins = os.environ.get(
+    "CORS_ORIGINS", "http://localhost:3000,http://localhost:5173"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials="*" not in _cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -29,6 +35,13 @@ store = DataStore()
 sync_receiver = SyncReceiver(store)
 report_engine = ReportEngine(store)
 webhook_manager = WebhookManager()
+
+_API_KEY = os.environ.get("BWAVE_API_KEY", "")
+
+
+async def verify_api_key(x_api_key: str = Header(default="")) -> None:
+    if _API_KEY and x_api_key != _API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
 
 
 @app.get("/health")
@@ -73,7 +86,9 @@ async def dashboard_overview():
 
 
 @app.post("/api/v1/sync/receive")
-async def receive_sync(data: SyncReceiveRequest):
+async def receive_sync(
+    data: SyncReceiveRequest, _: None = Depends(verify_api_key)
+):
     event = sync_receiver.receive_inspection(data)
     webhook_manager.trigger("sync.received", {
         "vessel_id": data.vessel_id,
@@ -83,7 +98,9 @@ async def receive_sync(data: SyncReceiveRequest):
 
 
 @app.post("/api/v1/reports/generate")
-async def generate_report(request: ReportGenerateRequest):
+async def generate_report(
+    request: ReportGenerateRequest, _: None = Depends(verify_api_key)
+):
     try:
         report = report_engine.generate_audit_report(
             request.vessel_id, request.report_type, request.format,
@@ -102,7 +119,9 @@ async def get_report(report_id: str):
 
 
 @app.post("/api/v1/webhooks/configure")
-async def configure_webhook(request: WebhookConfigRequest):
+async def configure_webhook(
+    request: WebhookConfigRequest, _: None = Depends(verify_api_key)
+):
     try:
         webhook_id = webhook_manager.configure(request.url, request.events)
         return {"webhook_id": webhook_id, "status": "configured"}
@@ -111,7 +130,9 @@ async def configure_webhook(request: WebhookConfigRequest):
 
 
 @app.post("/api/v1/webhooks/test")
-async def test_webhook(request: WebhookTestRequest):
+async def test_webhook(
+    request: WebhookTestRequest, _: None = Depends(verify_api_key)
+):
     success = webhook_manager.test(request.webhook_id)
     if not success:
         raise HTTPException(status_code=404, detail="Webhook not found")

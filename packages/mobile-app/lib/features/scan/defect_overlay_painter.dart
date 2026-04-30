@@ -44,10 +44,10 @@ class DefectOverlayPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
     canvas.drawRect(rect, fillPaint);
 
-    _drawLabel(canvas, rect, defect);
+    _drawLabel(canvas, size, rect, defect);
   }
 
-  void _drawLabel(Canvas canvas, Rect boxRect, Defect defect) {
+  void _drawLabel(Canvas canvas, Size size, Rect boxRect, Defect defect) {
     final label = defect.label;
 
     final textStyle = ui.TextStyle(
@@ -69,9 +69,12 @@ class DefectOverlayPainter extends CustomPainter {
     final labelWidth = paragraph.longestLine + 12;
     final labelHeight = paragraph.height + 8;
 
+    final labelTop = (boxRect.top - labelHeight - 2).clamp(0.0, size.height - labelHeight);
+    final labelLeft = boxRect.left.clamp(0.0, (size.width - labelWidth).clamp(0.0, size.width));
+
     final labelRect = Rect.fromLTWH(
-      boxRect.left,
-      boxRect.top - labelHeight - 2,
+      labelLeft,
+      labelTop,
       labelWidth,
       labelHeight,
     );

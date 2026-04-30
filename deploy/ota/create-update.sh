@@ -91,12 +91,24 @@ cat > "$MANIFEST_FILE" << EOF
 }
 EOF
 
-# ── GPG signing (placeholder) ─────────────────────────────────────
+# ── GPG signing (mandatory) ───────────────────────────────────────
 
 echo "▶ Signing package..."
-# TODO: Enable when GPG key is configured
-# gpg --detach-sign --armor -o "${PACKAGE_FILE}.sig" "$PACKAGE_FILE"
-echo "  ⚠ GPG signing skipped (key not configured)"
+GPG_KEY_ID="${BWAVE_GPG_KEY_ID:-}"
+if [[ -z "$GPG_KEY_ID" ]]; then
+    echo "  ✗ BWAVE_GPG_KEY_ID not set. GPG signing is mandatory for OTA."
+    echo "  Set: export BWAVE_GPG_KEY_ID=<your-release-key-fingerprint>"
+    rm -rf "$STAGING_DIR"
+    exit 1
+fi
+
+gpg --detach-sign --armor --local-user "$GPG_KEY_ID" \
+    -o "${PACKAGE_FILE}.sig" "$PACKAGE_FILE" || {
+    echo "  ✗ GPG signing failed. Ensure key $GPG_KEY_ID is available."
+    rm -rf "$STAGING_DIR"
+    exit 1
+}
+echo "  ✓ Signed: ${PACKAGE_FILE}.sig"
 
 # ── Cleanup & summary ─────────────────────────────────────────────
 

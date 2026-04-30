@@ -1,12 +1,51 @@
 from __future__ import annotations
 
+import ipaddress
 import logging
+import socket
 import uuid
 from datetime import datetime
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
 VALID_EVENT_TYPES = {"defect.critical", "inspection.completed", "sync.received", "detention.risk"}
+
+_BLOCKED_HOSTNAMES = {"localhost", "localhost.localdomain", "0.0.0.0"}
+
+
+def _is_private_ip(host: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(host)
+        return addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved
+    except ValueError:
+        pass
+    try:
+        resolved = socket.getaddrinfo(host, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        for _, _, _, _, sockaddr in resolved:
+            addr = ipaddress.ip_address(sockaddr[0])
+            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+                return True
+    except (socket.gaierror, OSError):
+        pass
+    return False
+
+
+def _validate_webhook_url(url: str) -> None:
+    parsed = urlparse(url)
+
+    if parsed.scheme != "https":
+        raise ValueError(f"Webhook URL must use https:// (got '{parsed.scheme}://')")
+
+    if not parsed.hostname:
+        raise ValueError("Webhook URL has no hostname")
+
+    hostname = parsed.hostname.lower()
+    if hostname in _BLOCKED_HOSTNAMES:
+        raise ValueError(f"Webhook URL cannot target {hostname}")
+
+    if _is_private_ip(hostname):
+        raise ValueError("Webhook URL cannot target private/internal IP addresses")
 
 
 class WebhookManager:
@@ -18,6 +57,8 @@ class WebhookManager:
         invalid = set(events) - VALID_EVENT_TYPES
         if invalid:
             raise ValueError(f"Invalid event types: {invalid}")
+
+        _validate_webhook_url(url)
 
         webhook_id = f"WH-{uuid.uuid4().hex[:8]}"
         self.webhooks[webhook_id] = {

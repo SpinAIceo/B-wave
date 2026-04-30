@@ -20,10 +20,15 @@ class EdgeClient {
 
   Future<void> connect() async {
     try {
-      // TODO: Replace with real gRPC channel when Dart proto stubs are generated
-      // final channel = ClientChannel(host, port: port, ...);
-      _connected = true;
-      _useMock = true;
+      _connected = false;
+      _useMock = const bool.fromEnvironment('BWAVE_USE_MOCKS', defaultValue: true);
+      if (!_useMock) {
+        // TODO: Replace with real gRPC channel when Dart proto stubs are generated
+        // final channel = ClientChannel(host, port: port, ...);
+        _connected = false;
+      } else {
+        _connected = true;
+      }
     } catch (_) {
       _connected = false;
       _useMock = true;
