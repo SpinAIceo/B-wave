@@ -32,7 +32,7 @@ jobs:
           pip install grpcio-tools
           bash scripts/proto-gen.sh
       - name: Install dependencies
-        run: pip install ruff pytest grpcio Pillow numpy scipy
+        run: pip install ruff pytest grpcio Pillow numpy scipy pyyaml
       - name: Lint
         working-directory: packages/ai-engine
         run: ruff check src/ tests/
