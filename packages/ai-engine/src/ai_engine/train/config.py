@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-DEFECT_CLASSES = ["rust", "damage", "leak", "missing_label", "cargo_lashing"]
+DEFECT_CLASSES = ["rust", "damage", "leak"]
 
 
 @dataclass
@@ -23,7 +23,7 @@ class AugmentationConfig:
 @dataclass
 class TrainConfig:
     model_name: str = "yolo26s.pt"
-    num_classes: int = 5
+    num_classes: int = 3
     class_names: list[str] = field(default_factory=lambda: list(DEFECT_CLASSES))
     image_size: int = 640
     batch_size: int = 16
@@ -37,3 +37,7 @@ class TrainConfig:
     project: str = "runs/train"
     name: str = "bwave-defect"
     augmentation: AugmentationConfig = field(default_factory=AugmentationConfig)
+    # imbalance mitigation
+    copy_paste: float = 0.3
+    mixup: float = 0.15
+    cls_loss_gain: float = 1.0

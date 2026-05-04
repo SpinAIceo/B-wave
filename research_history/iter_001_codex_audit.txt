@@ -1,0 +1,39 @@
+================================================================================
+ITERATION 001 — Codex 3-Way Audit
+Date: 2026-04-30
+================================================================================
+
+[GOAL]
+프로덕션 배포 전 코드 전체 감사 — 버그, 보안, 개선 기회 탐색
+
+[ACTIONS]
+Codex 에이전트 3개 병렬 실행:
+  1. Bug Investigation — 26개 이슈 발견
+  2. Code Review — 30개 이슈 발견
+  3. Missed Lever Exploration — 17개 이슈 발견
+
+[KEY FINDINGS]
+CRITICAL:
+  - security.rs:103 — JWT 서명 미검증 (payload만 decode)
+  - security.rs:83 — 빈 JWT secret → plaintext dev auth 프로덕션 노출
+  - server.py:11 — proto import 경로 잘못됨 (parents[4])
+
+HIGH:
+  - labeling/config.py:86 — YOLO 라벨 6열 export (ultralytics는 5열 기대)
+  - pre_labeler.py — mock 라벨이 학습 데이터에 유입 가능
+  - server.py:126 — TLS 없이 gRPC insecure 기본 실행
+  - trainer.py:76 — ultralytics metrics API 잘못 접근 (results.box 아래)
+  - engine.py — TensorRT/ARM64 미지원, ONNX 출력 검증 없음
+
+[FIXES APPLIED]
+  - labeling/config.py: export_confidence_scores=True → False
+  - pre_labeler.py: mock fallback → RuntimeError
+  - train/config.py: yolov8n.pt → yolo26s.pt
+  - trainer.py: results.map50 → results.box.map50
+  - dataset.py: 라벨 검증 추가 (class ID, bbox 범위)
+  - server.py: proto 경로 수정, TLS 강제, 에러 핸들링
+  - engine.py: end2end 파서, TensorRT, ARM64 EP
+  - pyproject.toml: ultralytics>=8.4
+
+[RESULT]
+commit 4b28f8c — 9개 파일 수정, 963 insertions, 19 deletions

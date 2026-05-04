@@ -1,0 +1,49 @@
+================================================================================
+ITERATION 010 - 5-Class Expansion + Ship-Specific Data Acquisition
+Date: 2026-05-02
+================================================================================
+
+[GOALS]
+1. ONNX export + benchmark
+2. 5클래스 확장 (cargo_lashing, missing_label 추가)
+3. 실제 선박 데이터 탐색 및 다운로드
+
+[ONNX BENCHMARK — RTX 4090]
+Model: YOLO26s best.pt (Config A, mAP50-95=0.323)
+  PyTorch GPU: mean=8.3ms  p50=8.1ms  p95=9.3ms  p99=10.8ms
+  SLA <500ms: PASS (p95=9.3ms, 1.9% of budget)
+  ONNX file: 37MB
+
+[5-CLASS DATASET GENERATED]
+data/unified-5class/data.yaml
+  Total: 21,180 images
+  rust:           15,734 labels
+  damage:          8,884 labels
+  leak:            6,873 labels
+  missing_label:   6,221 labels (fire safety + hazmat)
+  cargo_lashing:   8,840 labels (wire rope + fastener)
+
+Class mapping:
+  wire-rope (break/thunderbolt/wear) -> cargo_lashing(4)
+  fastener (broken/missing) -> cargo_lashing(4)
+  fire-safety (extinguisher) -> missing_label(3)
+  hazmat-13 -> missing_label(3) [download incomplete, 0 entries]
+
+[TRAINING LAUNCHED]
+YOLO26m (21.9M params), 200 epochs, batch=16, AdamW
+Data: data/unified-5class/data.yaml
+
+[SHIP-SPECIFIC DATASETS FOUND]
+1. MaVeCoDD (Mendeley) — 실제 선박 선체 부식, 픽셀 라벨, 고/저해상도
+   - 수동 다운로드 필요 (Mendeley Data)
+2. Marine Corrosion (Kaggle) — 5,105장, 해양 부식/정상
+   - 다운로드 중 (4.39GB)
+3. Corrosion Detect (Kaggle) — 부식 탐지
+   - 다운로드 중
+4. AI Hub — 선박·해양플랜트 부품 품질검사 영상
+   - 수동 확인 필요 (한국어 사이트)
+
+[KEY INSIGHT]
+MaVeCoDD가 가장 중요 — 실제 선박 도메인 데이터.
+현재 모든 데이터는 철강/콘크리트/파이프 등 비선박 도메인.
+선박 데이터 fine-tuning이 mAP50-95 +10-15 예상.

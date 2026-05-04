@@ -1,19 +1,58 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
 .venv/
 venv/
+
+# Node
 node_modules/
-.dart_tool/
-build/
+.next/
 dist/
+build/
+
+# Dart/Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Rust
 target/
+
+# AI model weights (large binary files)
+*.pt
 *.onnx
 *.trt
-*.pt
+*.engine
+*.pb
+
+# Datasets (large — stored on E: drive)
+data/raw/
+data/unified/
+data/unified-5class/
+data/unified-clean/
+data/auto-labeled/
+data/combined-finetune/
+
+# Training runs & experiment outputs
+runs/
+experiments/
+
+# Secrets & environment
 .env
 .env.*
-*.egg-info/
+.env.local
+
+# Binary docs / screenshots
+docs/*.png
+docs/*.jpg
+docs/*.pdf
+
+# Misc
 shared/gen/
 *.lock
 !pubspec.lock
+*.zip
+*.tar.gz
+yolo26*.pt

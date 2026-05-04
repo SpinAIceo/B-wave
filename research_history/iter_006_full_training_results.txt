@@ -1,0 +1,50 @@
+================================================================================
+ITERATION 006 — Full Training Results (Best Config)
+Date: 2026-05-01
+================================================================================
+
+[CONFIG]
+Model: yolo26s.pt, SGD, lr=0.01
+imgsz=640, batch=32, 100 epochs
+mosaic=0, copy_paste=0, mixup=0, degrees=0, scale=0
+fliplr=0.5 only
+Data: 11,367 images (rust/damage/leak)
+
+[RESULTS]
+              P       R       mAP50   mAP50-95
+all          0.691   0.476   0.504   0.309
+rust                                 0.243
+damage                               0.236
+leak                                 0.449
+
+[COMPARISON]
+                    iter002(AdamW+mosaic)    iter006(SGD-no-aug)
+mAP50-95 overall:   0.323                   0.309  (-4%)
+rust mAP50-95:      0.164                   0.243  (+48%)
+damage mAP50-95:    0.223                   0.236  (+6%)
+leak mAP50-95:      0.582                   0.449  (-23%)
+Precision:          0.648                   0.691  (+7%)
+
+[ANALYSIS]
+1. SGD+no-aug는 localization(bbox 정밀도) 개선에 효과적
+   - rust +48%, damage +6%
+   - Precision +7%
+
+2. 그러나 leak 하락 (-23%)
+   - augmentation 제거로 oversampled leak 데이터의 다양성 부족
+   - mosaic 제거로 소수 클래스 노출 빈도 감소
+
+3. 전체 mAP50-95는 동등 수준 (0.323 vs 0.309)
+   - Trade-off: localization ↑, detection coverage ↓
+
+[CONCLUSION]
+최적 해는 두 설정의 중간:
+- SGD 유지 (확실히 AdamW보다 우수)
+- mosaic=0.5 또는 selective augmentation 적용
+- leak에만 augmentation 적용하는 방법 필요
+
+[NEXT STEPS]
+1. sgd-low-lr (2위, mAP50-95=0.2756)로 100ep 학습 비교
+   → mAP50이 0.497로 가장 높았음, balance가 더 좋을 수 있음
+2. 또는 sgd + mosaic=0.5 (4위)로 100ep — leak/rust 균형
+3. ONNX export & edge benchmark

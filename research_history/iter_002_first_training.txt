@@ -1,0 +1,34 @@
+================================================================================
+ITERATION 002 — First YOLO26s Training
+Date: 2026-04-30
+================================================================================
+
+[GOAL]
+3클래스(rust, damage, leak) YOLO26s base model 첫 학습
+
+[SETUP]
+Model: yolo26s.pt (9.5M params, COCO pretrained)
+Data: 9,007장 (oversampling 적용)
+  - rust: 15,734 labels
+  - damage: 9,151 labels
+  - leak: 3,315 labels (oversampled from 569)
+Config: batch=32, imgsz=640, epochs=100, AdamW, lr=0.01
+  copy_paste=0.3, mixup=0.15, mosaic=1.0, cls=1.0
+GPU: RTX 4090
+Duration: ~2 hours
+
+[RESULTS]
+                 P       R       mAP50   mAP50-95
+all             0.648   0.580   0.598   0.323
+rust            0.509   0.358   0.368   0.164
+damage          0.578   0.441   0.464   0.223
+leak            0.856   0.940   0.962   0.582
+
+[ANALYSIS]
+- leak 성능 우수: oversampling + 4_shuiban 재매핑 효과
+- rust/damage 낮음: 다양한 도메인 데이터 혼합으로 일반화 어려움
+- mAP50 vs mAP50-95 격차 큼: localization 정밀도 부족
+  → Codex 분석: mosaic=1.0이 bbox 정밀도를 저하
+
+[NEXT]
+leak 데이터 추가 다운로드 + Karpathy Loop 자동 실험

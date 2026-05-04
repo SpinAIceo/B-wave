@@ -1,0 +1,50 @@
+================================================================================
+ITERATION 004 — Karpathy Loop Auto-Experiments
+Date: 2026-05-01
+Status: IN PROGRESS
+================================================================================
+
+[GOAL]
+Karpathy AutoResearch 방식 적용:
+제안 → 짧은 학습(30ep) → 스칼라 지표 평가 → 개선이면 채택 → 반복
+
+[PHASE 1 — autorun.py (8 experiments)]
+  1. baseline      — yolo26s, 640, batch32, AdamW, mosaic=1.0
+  2. yolo26m       — 큰 모델 (20.4M params)
+  3. higher-res    — imgsz=960
+  4. heavy-augment — copy_paste=0.5, mixup=0.3, degrees=15, scale=0.5
+  5. light-augment — copy_paste=0, mixup=0
+  6. high-cls-loss — cls=2.0
+  7. low-lr        — lr=0.005
+  8. sgd           — SGD optimizer
+
+[PHASE 2 — autorun_phase2.py (5 experiments, Codex 추천)]
+  1. no-mosaic        — mosaic=0.0 (localization 직접 테스트)
+  2. no-mosaic-no-aug — 모든 aug 제거 (순수 데이터 품질)
+  3. no-mosaic-960    — mosaic=0 + 960px
+  4. mosaic-half      — mosaic=0.5 (절충)
+  5. no-mosaic-yolo26m — mosaic=0 + 큰 모델
+
+[EVALUATION METRIC]
+Primary: mAP50-95 (localization 정밀도 포함)
+Secondary: per-class mAP50-95 (rust, damage, leak)
+
+[BUG FIXES DURING THIS ITERATION]
+  1. engine.py:10 — CLASS_NAMES 5→3 불일치 수정 (HIGH)
+  2. engine.py:84 — end2end 감지 시 dynamic shape 가드 추가
+  3. autorun_phase2.py:184 — 'N/A' 포맷 에러 수정
+  4. trainer.py:53 — mosaic 하드코딩 → config에서 읽도록 변경
+
+[ZOMBIE CLEANUP]
+  - Killed: 3 orphan tail (Apr 26-27), 1 orphan train.py
+  - Verified: 0 cron jobs, 0 scheduled tasks
+
+[RESULT]
+Phase 1 진행 중 (PID 24916). 완료 시 Phase 2 자동 실행 예정.
+총 13개 실험, ~6시간 소요 예상.
+결과는 runs/experiments/results.json에 축적.
+
+[PENDING]
+- Phase 1 & 2 완료 → 최적 설정 확정
+- 최적 설정으로 100 epochs full training
+- Phase 2 데이터(wire-rope, fastener, hazmat) 5클래스 확장

@@ -1,0 +1,50 @@
+================================================================================
+ITERATION 011 - 5-Class Model Results
+Date: 2026-05-02
+================================================================================
+
+[CONFIG]
+Model: YOLO26m (21.9M params)
+Data: 21,180 images, 5 classes
+Epochs: 200, batch=16, AdamW, lr=0.01
+mosaic=1.0, close_mosaic=10, copy_paste=0.3, mixup=0.15
+
+[RESULTS]
+              P       R       mAP50   mAP50-95
+all          0.551   0.425   0.440   0.205
+rust                                 0.115
+damage                               0.132
+leak                                 0.264
+missing_label                        0.205
+cargo_lashing                        0.308
+
+[COMPARISON — 3-class vs 5-class]
+                3-class(ConfigA)    5-class(YOLO26m)
+mAP50-95:       0.323               0.205  (-37%)
+rust:           0.164               0.115  (-30%)
+damage:         0.223               0.132  (-41%)
+leak:           0.582               0.264  (-55%)
+
+[ANALYSIS]
+1. 5클래스 확장으로 전체 성능 하락
+   - 클래스 수 증가 + 이질적 데이터 혼합
+   - fire safety(소화기)가 missing_label 대리지표로 약함
+   - fastener 데이터 중 trackbed_stuff 등 무관 클래스 포함
+
+2. cargo_lashing이 의외로 높음 (0.308)
+   - wire rope 데이터가 품질 좋고 도메인 일관성 있음
+
+3. 기존 3개 클래스 모두 하락
+   - 새 클래스 데이터가 기존 클래스 학습을 방해
+
+[CONCLUSION]
+현재 최고 모델: 3-class Config A (mAP50-95=0.323)
+5클래스는 데이터 품질 개선 후 재시도 필요:
+  - missing_label: HAZMAT-13 실제 다운로드 + 합성 데이터 필요
+  - cargo_lashing: wire rope만 유지, fastener 제외 고려
+  - 또는 2단계 학습: 3-class base → 5-class fine-tuning
+
+[CURRENT BEST MODELS]
+3-class: runs/detect/runs/train/bwave-yolo26s-v1/weights/best.pt (mAP50-95=0.323)
+5-class: runs/detect/runs/train/bwave-yolo26m-5class/weights/best.pt (mAP50-95=0.205)
+ONNX: runs/detect/runs/train/bwave-yolo26s-v1/weights/best.onnx (37MB)

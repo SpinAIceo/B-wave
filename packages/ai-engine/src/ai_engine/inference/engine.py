@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-CLASS_NAMES = ["rust", "damage", "leak", "missing_label", "cargo_lashing"]
+CLASS_NAMES = ["rust", "damage", "leak"]
 
 
 @dataclass
@@ -81,7 +81,8 @@ class InferenceEngine:
         outputs = self._session.get_outputs()
         if len(outputs) > 0:
             out_shape = outputs[0].shape
-            if out_shape and len(out_shape) == 3 and out_shape[-1] == 6:
+            if (out_shape and len(out_shape) == 3
+                    and isinstance(out_shape[-1], int) and out_shape[-1] == 6):
                 self._is_end2end = True
 
         self._model_version = self.model_path.stem

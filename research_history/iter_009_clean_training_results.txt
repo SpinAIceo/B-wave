@@ -1,0 +1,47 @@
+================================================================================
+ITERATION 009 - Cleaned Data Training Results
+Date: 2026-05-02
+================================================================================
+
+[RESULTS]
+              P       R       mAP50   mAP50-95
+all          0.638   0.423   0.456   0.248
+rust                                 0.183
+damage                               0.187
+leak                                 0.374
+
+[4-WAY COMPARISON]
+                    ConfigA(orig)  ConfigB(SGD)  Codex-Opt  Cleaned
+mAP50-95:           0.323          0.309         0.297      0.248
+mAP50:              0.598          0.504         0.517      0.456
+rust:               0.164          0.243         0.234      0.183
+damage:             0.223          0.236         0.226      0.187
+leak:               0.582          0.449         0.433      0.374
+
+[ANALYSIS]
+데이터 정제가 오히려 성능을 크게 하락시킴 (-23% mAP50-95).
+
+원인 분석:
+1. tiny bbox 제거 (1,030개) -> rust 학습 데이터 감소
+   - 작은 부식 패치가 실제로 유효한 annotation일 수 있음
+   - 극소 bbox를 "노이즈"로 판단했지만, 실제 초기 부식은 작음
+
+2. huge bbox 제거 (497개) -> CODEBRIM 등에서 유효한 넓은 결함 영역 삭제
+   - 콘크리트 전체 면에 퍼진 efflorescence 등은 large bbox가 정상
+
+3. 중복 제거 (890개) -> 데이터 양 감소가 다양성 감소보다 큰 영향
+   - 11,367 -> 10,473 (-8%) 이미지 감소
+
+[CONCLUSION]
+현재 데이터셋에서는 공격적 정제가 역효과.
+tiny/huge bbox가 노이즈가 아니라 유효한 학습 신호였음.
+
+현재 최고 모델: Config A (원본 데이터, AdamW+mosaic)
+  mAP50-95=0.323, mAP50=0.598
+  runs/detect/runs/train/bwave-yolo26s-v1/weights/best.pt
+
+[NEXT]
+데이터 정제는 중단. 현재 최고 모델(Config A)로:
+1. ONNX/TensorRT export
+2. Edge benchmark
+3. 5클래스 확장 (wire-rope, hazmat 데이터 추가)

@@ -1,0 +1,33 @@
+================================================================================
+ITERATION 003 — Data Expansion & Leak Reinforcement
+Date: 2026-05-01
+================================================================================
+
+[GOAL]
+leak 클래스 보강 + 향후 5클래스 확장용 데이터 확보
+
+[ACTIONS]
+1. Roboflow 데이터 6개 자동 다운로드 (API key 사용)
+   - Oil Spill Detection (daisycat1008): 907장 → leak
+   - Detect Oil Spill (chris): 762장 → leak
+   - Pipeline Leak Prediction: 536장 → leak/damage
+   - Wire Rope Defect: 5,998장 → 향후 cargo_lashing
+   - Fastener Defect: 2,234장 → 향후 cargo_lashing
+   - Fire Safety Equipment: 3,262장 → 향후 missing_label
+
+2. HAZMAT-13 수동 다운로드 (Google Drive)
+   - 1,685장 + 1,582 VOC XML → 향후 missing_label
+
+3. GC10-DET 4_shuiban 매핑 수정: rust(0) → leak(2)
+
+4. 통합 파이프라인에 oilspill, oilspill2, pipeleak 컨버터 추가
+
+[DATASET COMPARISON]
+              Before      After
+Total images: 9,007       11,367
+rust labels:  15,734      15,734
+damage:       9,151       8,884
+leak:         3,315       6,873
+
+[RESULT]
+leak 라벨 2배 이상 증가. 향후 확장용 데이터도 data/raw/에 대기.

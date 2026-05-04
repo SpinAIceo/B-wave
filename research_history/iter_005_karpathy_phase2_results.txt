@@ -1,0 +1,51 @@
+================================================================================
+ITERATION 005 — Karpathy Loop Phase 2 RESULTS + Full Training Launch
+Date: 2026-05-01
+================================================================================
+
+[PHASE 2 RESULTS — 6 SGD experiments × 30 epochs]
+
+Full ranking (14 experiments total):
+  1. sgd-no-mosaic-no-aug   0.2830  ← NEW WINNER
+  2. sgd-low-lr             0.2756
+  3. sgd-optimizer          0.2675  (Phase1 winner)
+  4. sgd-mosaic-half        0.2558
+  5. sgd-no-mosaic          0.2554
+  6. sgd-no-mosaic-yolo26m  0.2482
+  7. sgd-no-mosaic-960      0.2462
+  8. low-lr (AdamW)         0.2092
+  ...
+ 14. yolo26m (AdamW)        0.1772
+
+[KEY INSIGHTS]
+1. SGD + no mosaic + no augmentation = 최적
+   - Codex 가설 확인: mosaic가 localization 저해
+   - augmentation 제거가 오히려 mAP50-95 개선 (+5.8% vs sgd baseline)
+   - 30 epochs에서도 일관된 경향
+
+2. SGD 계열이 상위 7개 독점
+   - SGD 평균 mAP50-95: 0.2610
+   - AdamW 평균 mAP50-95: 0.1905
+   - SGD 우위: +37%
+
+3. Per-class 분석:
+   - rust:   0.2158 (iter002: 0.164 → +32%)
+   - damage: 0.2253 (iter002: 0.223 → +1%)
+   - leak:   0.4078 (iter002: 0.582 → 하락, but 30ep vs 100ep)
+
+[AUTORUN PATH BUG]
+ultralytics가 project 경로 앞에 runs/detect/를 추가함.
+autorun.py에서 best.pt를 runs/experiments/에서 찾으려 해서 validation 실패.
+실제 경로: runs/detect/runs/experiments/{name}/weights/best.pt
+→ 수동 re-eval로 해결. 향후 스크립트 수정 필요.
+
+[FULL TRAINING LAUNCHED]
+Config: SGD, no mosaic, no augmentation, 100 epochs
+Model: yolo26s.pt, imgsz=640, batch=32
+Output: runs/train/bwave-yolo26s-best/
+Expected duration: ~2 hours on RTX 4090
+
+[NEXT]
+- 100 epochs 결과 확인
+- 결과 좋으면 ONNX/TensorRT export
+- Phase 2 데이터(wire-rope, fastener, hazmat) 5클래스 확장

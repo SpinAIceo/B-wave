@@ -1,0 +1,48 @@
+================================================================================
+ITERATION 007 — Codex Optimal Config Results
+Date: 2026-05-01
+================================================================================
+
+[CONFIG]
+SGD, lr=0.005, mosaic=0.5, close_mosaic=90
+copy_paste=0.15, mixup=0.05, degrees=5, scale=0.1
+100 epochs, batch=32, imgsz=640
+
+[RESULTS]
+              P       R       mAP50   mAP50-95
+all          0.701   0.491   0.517   0.297
+rust                                 0.234
+damage                               0.226
+leak                                 0.433
+
+[3-WAY COMPARISON]
+                    ConfigA(AdamW)  ConfigB(SGD-noaug)  Codex-Optimal
+mAP50-95:           0.323           0.309               0.297
+mAP50:              0.598           0.504               0.517
+Precision:          0.648           0.691               0.701
+rust:               0.164           0.243               0.234
+damage:             0.223           0.236               0.226
+leak:               0.582           0.449               0.433
+
+[ANALYSIS]
+Codex Optimal은 Config B와 비슷한 성능.
+close_mosaic=90 전략이 기대만큼 효과적이지 않았음.
+
+Config A (AdamW + full mosaic)가 여전히 전체 mAP50-95 최고.
+→ 가설: AdamW의 100ep 수렴이 SGD 30ep보다 좋을 수 있음.
+   30ep 실험에서 SGD가 이긴 건 수렴 속도 차이였을 가능성.
+
+현재 최고 모델: Config A (mAP50-95=0.323)
+  - runs/detect/runs/train/bwave-yolo26s-v1/weights/best.pt
+
+[KEY INSIGHT]
+30ep 실험 결과가 100ep 결과를 예측하지 못함.
+- 30ep에서 SGD > AdamW (+30%)
+- 100ep에서 AdamW > SGD (+4-8%)
+→ AdamW가 느리지만 더 깊이 수렴함.
+
+[NEXT CONSIDERATION]
+1. Config A가 현재 최고 → 이걸 base로 rust/damage 개선 집중
+2. AdamW + mosaic=0.5 + close_mosaic 조합 테스트
+3. 데이터 품질 개선이 모델 튜닝보다 효과적일 수 있음
+4. 5클래스 확장 시점 결정 필요

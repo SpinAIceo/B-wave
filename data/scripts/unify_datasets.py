@@ -39,7 +39,7 @@ GC10_CLASS_MAP = {
     "1_chongkong": 1,
     "2_hanfeng": 1,
     "3_yueyawan": 1,
-    "4_shuiban": 0,
+    "4_shuiban": 2,
     "5_youban": 2,
     "6_siban": 1,
     "7_yiwu": 1,
@@ -68,6 +68,7 @@ SDNET_MAX_NEGATIVES = 2000
 TRAIN_RATIO = 0.80
 VAL_RATIO = 0.15
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff"}
+OVERSAMPLE_TARGET_RATIO = 0.15
 
 log = logging.getLogger("unify")
 
@@ -483,9 +484,155 @@ def convert_roboflow_pipe_defect(raw_root: Path) -> list[DataEntry]:
     )
 
 
+def convert_roboflow_oil_spill(raw_root: Path) -> list[DataEntry]:
+    return _convert_roboflow_yolo(
+        raw_root, "roboflow-oil-spill", "RBF-OilSpill", {0: 2}, "rbfoil1"
+    )
+
+
+def convert_roboflow_oil_spill2(raw_root: Path) -> list[DataEntry]:
+    return _convert_roboflow_yolo(
+        raw_root, "roboflow-oil-spill2", "RBF-OilSpill2", {0: 2}, "rbfoil2"
+    )
+
+
+def convert_roboflow_pipe_leak(raw_root: Path) -> list[DataEntry]:
+    return _convert_roboflow_yolo(
+        raw_root, "roboflow-pipe-leak", "RBF-PipeLeak",
+        {0: 1, 1: 2, 2: 2},  # crack->damage, gas->leak, water->leak
+        "rbfleak"
+    )
+
+
+def convert_roboflow_wire_rope(raw_root: Path) -> list[DataEntry]:
+    return _convert_roboflow_yolo(
+        raw_root, "roboflow-wire-rope", "RBF-WireRope",
+        {0: 4, 1: 4, 2: 4},  # break/thunderbolt/wear -> cargo_lashing
+        "rbfwire"
+    )
+
+
+def convert_roboflow_fastener(raw_root: Path) -> list[DataEntry]:
+    return _convert_roboflow_yolo(
+        raw_root, "roboflow-fastener", "RBF-Fastener",
+        {2: 4, 3: 4, 4: 4},  # fastener2_broken/fastener_broken/missing -> cargo_lashing
+        "rbffast"
+    )
+
+
+def convert_roboflow_fire_safety(raw_root: Path) -> list[DataEntry]:
+    return _convert_roboflow_yolo(
+        raw_root, "roboflow-fire-safety", "RBF-FireSafety",
+        {0: 3},  # extinguisher -> missing_label (sign/equipment presence)
+        "rbffire"
+    )
+
+
+def convert_hazmat13(raw_root: Path) -> list[DataEntry]:
+    """Convert HAZMAT-13 VOC XML dataset. All 13 hazmat classes -> missing_label."""
+    base = raw_root / "hazmat13" / "original_full"
+    if not base.exists():
+        base = raw_root / "hazmat13" / "original"
+    entries: list[DataEntry] = []
+
+    img_dir = base / "JPEGImages"
+    ann_dir = base / "bboxes" / "annotations"
+    if not img_dir.exists() or not ann_dir.exists():
+        log.warning("HAZMAT-13: directories not found at %s", base)
+        return entries
+
+    for xml_path in sorted(ann_dir.glob("*.xml")):
+        try:
+            tree = ET.parse(xml_path)
+        except ET.ParseError:
+            continue
+        root = tree.getroot()
+        img_w, img_h = parse_voc_size(root)
+        if img_w == 0 or img_h == 0:
+            continue
+        filename = root.findtext("filename", "")
+        if not filename:
+            continue
+
+        img_path = img_dir / filename
+        if not img_path.exists():
+            for ext in [".jpg", ".png", ".jpeg"]:
+                candidate = img_dir / (xml_path.stem + ext)
+                if candidate.exists():
+                    img_path = candidate
+                    break
+        if not img_path.exists():
+            continue
+
+        yolo_lines = []
+        for obj in root.iter("object"):
+            bbox = parse_voc_bbox(obj)
+            if bbox is None:
+                continue
+            cx, cy, w, h = voc_bbox_to_yolo(*bbox, img_w, img_h)
+            yolo_lines.append(fmt_yolo(3, cx, cy, w, h))  # all -> missing_label(3)
+
+        dest_name = f"hazmat_{img_path.stem}{img_path.suffix}"
+        entries.append(DataEntry(img_path, dest_name, yolo_lines, "HAZMAT-13"))
+
+    return entries
+
+
 # ---------------------------------------------------------------------------
 # Split assignment
 # ---------------------------------------------------------------------------
+
+def oversample_minority(entries: list[DataEntry], rng: random.Random) -> list[DataEntry]:
+    """Oversample images containing minority classes to reduce imbalance."""
+    class_counts: Counter = Counter()
+    for e in entries:
+        for line in e.yolo_lines:
+            cls_id = int(line.split()[0])
+            class_counts[cls_id] += 1
+
+    if not class_counts:
+        return entries
+
+    max_count = max(class_counts.values())
+    target_count = int(max_count * OVERSAMPLE_TARGET_RATIO)
+
+    entries_by_class: dict[int, list[DataEntry]] = defaultdict(list)
+    for e in entries:
+        classes_in_entry = {int(line.split()[0]) for line in e.yolo_lines}
+        for cls_id in classes_in_entry:
+            entries_by_class[cls_id].append(e)
+
+    extra: list[DataEntry] = []
+    for cls_id, count in class_counts.items():
+        if count >= target_count:
+            continue
+        pool = entries_by_class.get(cls_id, [])
+        if not pool:
+            continue
+        needed = target_count - count
+        num_copies = needed // len(pool) + 1
+        sampled = pool * num_copies
+        rng.shuffle(sampled)
+        for i, entry in enumerate(sampled[:needed]):
+            extra.append(DataEntry(
+                src_image_path=entry.src_image_path,
+                dest_image_name=f"os{i}_{entry.dest_image_name}",
+                yolo_lines=list(entry.yolo_lines),
+                dataset_name=entry.dataset_name,
+                split=entry.split,
+            ))
+
+    if extra:
+        new_counts: Counter = Counter()
+        for e in extra:
+            for line in e.yolo_lines:
+                new_counts[int(line.split()[0])] += 1
+        for cls_id in sorted(new_counts):
+            log.info("  Oversampled class %d (%s): +%d labels",
+                     cls_id, DEFECT_CLASSES[cls_id], new_counts[cls_id])
+
+    return entries + extra
+
 
 def assign_splits(entries: list[DataEntry], rng: random.Random) -> None:
     by_dataset: dict[str, list[DataEntry]] = defaultdict(list)
@@ -571,6 +718,8 @@ def main() -> None:
     parser.add_argument("--skip-validation", action="store_true")
     parser.add_argument("--datasets", type=str, default="all",
                         help="Comma-separated list: neudet,gc10,codebrim,sdnet,corrosion,pipe")
+    parser.add_argument("--oversample", action="store_true",
+                        help="Oversample minority classes to reduce imbalance")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -589,6 +738,13 @@ def main() -> None:
         "sdnet": lambda: convert_sdnet2018(args.raw_root, rng),
         "corrosion": lambda: convert_roboflow_corrosion(args.raw_root),
         "pipe": lambda: convert_roboflow_pipe_defect(args.raw_root),
+        "oilspill": lambda: convert_roboflow_oil_spill(args.raw_root),
+        "oilspill2": lambda: convert_roboflow_oil_spill2(args.raw_root),
+        "pipeleak": lambda: convert_roboflow_pipe_leak(args.raw_root),
+        "wirerope": lambda: convert_roboflow_wire_rope(args.raw_root),
+        "fastener": lambda: convert_roboflow_fastener(args.raw_root),
+        "firesafety": lambda: convert_roboflow_fire_safety(args.raw_root),
+        "hazmat": lambda: convert_hazmat13(args.raw_root),
     }
 
     for name, converter in converters.items():
@@ -598,6 +754,10 @@ def main() -> None:
         entries = converter()
         log.info("  -> %d entries", len(entries))
         all_entries.extend(entries)
+
+    if args.oversample:
+        log.info("Oversampling minority classes...")
+        all_entries = oversample_minority(all_entries, rng)
 
     log.info("Assigning splits for datasets without pre-existing splits...")
     assign_splits(all_entries, rng)

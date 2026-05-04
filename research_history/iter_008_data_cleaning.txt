@@ -1,0 +1,48 @@
+================================================================================
+ITERATION 008 - Data Quality Audit & Cleaning
+Date: 2026-05-02
+================================================================================
+
+[GOAL]
+Codex 권고: 모델 튜닝 중단, 데이터 품질 감사 우선.
+rust mAP50-95의 비정상 변동(0.164~0.243)은 데이터 문제 신호.
+
+[AUDIT FINDINGS]
+Total issues: 1,808
+  tiny_bbox (<0.1% area):          1,074  ← rust 대부분
+  huge_bbox (>80% area):             498  ← classification 수준 bbox
+  near_duplicate (cross-dataset):    216
+  exact_duplicate_cross:              14
+  too_many_labels (>50):               4
+  invalid_coords:                      2
+
+Key stats:
+  rust avg_area=0.08 (극소 bbox 대량)
+  leak avg_area=0.20 (rust의 2.5배)
+  4,153 cross-dataset near-duplicates in train
+
+[CLEANING APPLIED]
+  Images: 11,367 -> 10,473 (-894, 7.9%)
+  Labels removed:
+    tiny bbox:   1,030
+    huge bbox:     497
+    invalid:         2
+    duplicates:    890
+    too_many:        4
+
+  Class labels before -> after:
+    rust:   15,577 -> 14,250 (-8.5%)
+    damage:  7,966 ->  7,732 (-2.9%)
+    leak:    6,446 ->  6,255 (-3.0%)
+
+[TRAINING LAUNCHED]
+Config A (best performer) on cleaned data:
+  AdamW, lr=0.01, mosaic=1.0, copy_paste=0.3, mixup=0.15
+  100 epochs, batch=32, imgsz=640
+  Data: data/unified-clean/data.yaml
+
+[HYPOTHESIS]
+tiny bbox 제거 -> rust localization 개선 (노이즈 감소)
+huge bbox 제거 -> damage/leak localization 개선
+중복 제거 -> 일반화 능력 향상
+예상: mAP50-95 > 0.323 (현재 최고)

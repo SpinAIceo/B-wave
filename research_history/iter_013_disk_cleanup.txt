@@ -1,0 +1,41 @@
+================================================================================
+ITERATION 013 - Disk Cleanup & E: Drive Backup
+Date: 2026-05-03
+================================================================================
+
+[PROBLEM]
+C: drive nearly full (2GB remaining of 1.9TB)
+E: drive has 11TB free
+
+[ACTIONS]
+Moved to E:/B-wave-backup/:
+  data/raw/codebrim/          16GB -> E:/B-wave-backup/data/raw/
+  data/unified-5class/        9.9GB -> E:/B-wave-backup/data/processed/
+  data/auto-labeled/          4.5GB -> E:/B-wave-backup/data/processed/
+  data/raw/marine-corrosion/  4.5GB -> E:/B-wave-backup/data/raw/
+  data/raw/sdnet2018/         630MB -> E:/B-wave-backup/data/raw/
+
+Deleted (regeneratable):
+  data/combined-finetune/     14GB  (merge of unified + auto-labeled)
+  data/unified-clean/         8.7GB (failed cleaning experiment)
+
+Removed empty dirs:
+  data/raw/roboflow-rust/
+  data/raw/roboflow-metal/
+  data/raw/mavecod/
+
+[KEPT ON C:]
+  data/unified/               9.1GB (current best model's training data)
+  data/raw/ (small datasets)  ~3GB  (roboflow datasets for pipeline)
+  runs/                       1.1GB (model weights + experiment results)
+
+[ESTIMATED SPACE FREED]
+~57GB freed on C: drive
+
+[E: BACKUP STRUCTURE]
+E:/B-wave-backup/
+  data/raw/codebrim/
+  data/raw/marine-corrosion/
+  data/raw/sdnet2018/
+  data/processed/unified-5class/
+  data/processed/auto-labeled/

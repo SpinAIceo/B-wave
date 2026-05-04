@@ -1,0 +1,42 @@
+task: detect
+mode: train
+
+model: yolo26s.pt
+data: data.yaml
+epochs: 100
+imgsz: 640
+batch: 16
+device: 0
+workers: 8
+
+project: runs/next_best
+name: sgd_mosaic05_close90
+exist_ok: true
+save: true
+plots: true
+val: true
+
+optimizer: SGD
+lr0: 0.005
+lrf: 0.01
+momentum: 0.937
+weight_decay: 0.0005
+warmup_epochs: 3
+patience: 30
+
+mosaic: 0.5
+close_mosaic: 90
+copy_paste: 0.15
+mixup: 0.05
+fliplr: 0.5
+flipud: 0.0
+degrees: 5.0
+scale: 0.2
+translate: 0.1
+hsv_h: 0.015
+hsv_s: 0.5
+hsv_v: 0.3
+
+cls: 1.0
+box: 7.5
+dfl: 1.5

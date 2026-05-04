@@ -47,6 +47,10 @@ def train(config: TrainConfig, data_yaml: str | Path) -> TrainResult:
         fliplr=config.augmentation.horizontal_flip_prob,
         degrees=config.augmentation.rotation_degrees,
         scale=config.augmentation.scale_range[1] - 1.0,
+        copy_paste=config.copy_paste,
+        mixup=config.mixup,
+        cls=config.cls_loss_gain,
+        mosaic=getattr(config, "mosaic", 1.0),
     )
 
     best_path = Path(config.project) / config.name / "weights" / "best.pt"

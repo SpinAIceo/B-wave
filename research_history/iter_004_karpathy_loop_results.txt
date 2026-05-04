@@ -1,0 +1,43 @@
+================================================================================
+ITERATION 004 — Karpathy Loop Phase 1 RESULTS
+Date: 2026-05-01
+Status: COMPLETED
+================================================================================
+
+[PHASE 1 RESULTS — 8 experiments × 30 epochs]
+
+Ranking by mAP50-95:
+  1. sgd-optimizer    0.2675  ← WINNER (+30% vs baseline)
+  2. low-lr           0.2092
+  3. baseline         0.2049
+  4. light-augment    0.2014
+  5. heavy-augment    0.1847
+  6. high-cls-loss    0.1782
+  7. higher-res       0.1778
+  8. yolo26m          0.1772
+
+[KEY INSIGHT]
+SGD가 AdamW를 압도적으로 이김.
+- SGD: mAP50-95=0.2675, mAP50=0.4922
+- AdamW baseline: mAP50-95=0.2049, mAP50=0.4136
+- 차이: +30.5% (mAP50-95), +19% (mAP50)
+
+가설: AdamW의 adaptive learning rate가 이 규모의 데이터에서는
+오히려 noise에 민감. SGD의 일정한 momentum이 더 안정적 수렴.
+
+[SECONDARY FINDINGS]
+- heavy-augment 역효과: augmentation 강화가 오히려 성능 저하
+- yolo26m 과적합: 큰 모델이 30 epochs에서 더 낮음 (데이터 부족)
+- higher-res(960) 효과 없음: 30 epochs에서는 수렴 부족일 수 있음
+
+[NOTE]
+30 epochs는 경향 파악용. 실제 수치는 100 epochs full training에서 달라질 수 있음.
+그러나 SGD > AdamW 경향은 일관적.
+
+경로 버그 발견: ultralytics가 runs/detect/ 하위에 저장하여
+autorun.py의 validation이 실패했음. 수동 re-eval로 결과 확보.
+
+[PHASE 2 LAUNCHED]
+SGD 기반으로 mosaic 변형 6개 실험 시작:
+  sgd-no-mosaic, sgd-no-mosaic-no-aug, sgd-no-mosaic-960,
+  sgd-mosaic-half, sgd-no-mosaic-yolo26m, sgd-low-lr

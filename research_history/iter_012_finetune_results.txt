@@ -1,0 +1,47 @@
+================================================================================
+ITERATION 012 - Fine-tune with Auto-labeled Marine Corrosion
+Date: 2026-05-02
+================================================================================
+
+[CONFIG]
+Base: Config A best.pt (mAP50-95=0.323)
+Data: original unified (11,367) + auto-labeled marine corrosion (9,000) = ~20k
+Fine-tune: lr=0.001, 50 epochs, AdamW, mosaic=1.0
+
+[AUTO-LABELING STATS]
+Marine Corrosion 9,000 images:
+  Model-detected: 6,709 (75%)
+  Hint-labeled: 490 (5%)
+  Negative: 855 (9.5%)
+
+[RESULTS — evaluated on ORIGINAL val set]
+              P       R       mAP50   mAP50-95
+all          0.609   0.467   0.502   0.259
+rust                                 0.182
+damage                               0.246
+leak                                 0.349
+
+[COMPARISON]
+                    Config A(base)  Fine-tuned
+mAP50-95:           0.323           0.259  (-20%)
+mAP50:              0.598           0.502  (-16%)
+rust:               0.164           0.182  (+11%)
+damage:             0.223           0.246  (+10%)
+leak:               0.582           0.349  (-40%)
+
+[ANALYSIS]
+1. rust +11%, damage +10% — 해양 도메인 데이터 효과 있음
+2. leak -40% — auto-labeled marine corrosion이 leak을 희석
+   - 부식 이미지에서 모델이 leak으로 오탐 → 노이즈 유입
+3. 전체 mAP50-95 하락 — leak 하락이 전체를 끌어내림
+
+[CONCLUSION]
+Auto-labeling + fine-tuning은 rust/damage에 효과적이나,
+노이즈 라벨이 leak을 오염시킴.
+
+개선 방안:
+  - auto-label 시 높은 confidence threshold (0.5+)
+  - leak 클래스만 원본 데이터 유지, rust/damage만 보강
+  - 또는 selective fine-tuning (freeze leak head)
+
+현재 최고 모델: 여전히 Config A (mAP50-95=0.323)

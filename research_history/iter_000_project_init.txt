@@ -1,0 +1,36 @@
+================================================================================
+ITERATION 000 — Project Init & Data Collection
+Date: 2026-04-30
+================================================================================
+
+[GOAL]
+B-Wave Edge-Vision AI 선박 PSC 결함 자동 진단 스캐너의 AI 학습 파이프라인 구축.
+5개 결함 클래스: rust, damage, leak, missing_label, cargo_lashing
+
+[ACTIONS]
+1. 원시 데이터셋 6개 수집
+   - NEU-DET: 1,800장 (철강 표면, 200x200 grayscale)
+   - GC10-DET: 2,294장 (철강 결함, VOC XML)
+   - CODEBRIM: 1,590장 (콘크리트 교량, multi-label VOC XML)
+   - SDNET2018: 56,092장 (콘크리트 균열, classification only)
+   - Roboflow RAM Corrosion: 2,668장 (부식, YOLO polygon)
+   - Roboflow Pipe Defect: 1,018장 (파이프 결함, YOLO polygon)
+
+2. 데이터 검증
+   - yatishs-workspace (20k) 제외: augmented + 20개 의미없는 클래스
+   - Roboflow 데이터가 polygon(segmentation) 포맷임을 발견 → bbox 변환 필요
+
+3. 통합 파이프라인 구축 (data/scripts/unify_datasets.py)
+   - VOC XML → YOLO bbox 변환
+   - Polygon → YOLO bbox 변환
+   - 6개 데이터셋 클래스 매핑 → B-Wave 5클래스
+
+[DECISIONS]
+- NEU-DET 제외: texture patch, 전체 이미지 bbox (localization 학습 불가)
+- SDNET2018 제외: classification only, 가짜 full-image bbox
+- 3클래스(rust, damage, leak)로 시작: missing_label, cargo_lashing 데이터 없음
+- GC10-DET 4_shuiban(water spot): rust→leak 재매핑 (누수에 더 가까움)
+
+[RESULT]
+통합 데이터셋 생성: data/unified/
+초기 구성: 7,570장 (4개 데이터셋, oversampling 전)
