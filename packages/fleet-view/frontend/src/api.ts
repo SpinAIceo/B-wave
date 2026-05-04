@@ -5,7 +5,7 @@ import type {
   Vessel,
 } from './types';
 
-const API_BASE = '/api/v1';
+const API_BASE = (import.meta.env.VITE_API_URL ?? '') + '/api/v1';
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 async function fetchOrMock<T>(fetcher: () => Promise<T>, mockData: T): Promise<T> {
