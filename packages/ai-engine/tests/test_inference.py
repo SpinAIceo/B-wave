@@ -18,9 +18,10 @@ class TestInferenceEngineInit:
 
     def test_class_names(self):
         engine = InferenceEngine("nonexistent.onnx")
-        assert len(engine.class_names) == 5
+        assert len(engine.class_names) == 3
         assert "rust" in engine.class_names
-        assert "cargo_lashing" in engine.class_names
+        assert "damage" in engine.class_names
+        assert "leak" in engine.class_names
 
 
 class TestNMS:
