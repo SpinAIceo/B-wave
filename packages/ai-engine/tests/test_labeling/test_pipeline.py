@@ -5,7 +5,7 @@ import pytest
 from ai_engine.labeling.pipeline import AdvancedALPipeline, PipelineStatus
 from ai_engine.labeling.pre_labeler import PseudoLabel
 
-requires_sam = pytest.mark.skip(reason="requires groundingdino and segment_anything (not installed in CI)")
+requires_sam = pytest.mark.skip(reason="requires groundingdino and segment_anything")
 
 
 class TestPipelineInit:
