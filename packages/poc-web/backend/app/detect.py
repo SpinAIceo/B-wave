@@ -7,7 +7,10 @@ from pathlib import Path
 
 from PIL import Image
 
+from app.logger import get_logger
 from app.models import BBox, DetectResponse
+
+log = get_logger("bwave.detect")
 
 # PSC mapping (mirrors psc_mapper.py)
 _PSC_CODE: dict[str, str] = {
@@ -44,9 +47,12 @@ def _find_model() -> Path | None:
         Path("runs/detect/runs/train/bwave-yolo26s-v1/weights/best.pt"),
         Path("runs/detect/runs/train/bwave-yolo26s-v1/weights/best.onnx"),
     ]
+    log.debug(f"model search candidates={[str(c) for c in candidates]}")
     for p in candidates:
         if p.exists() and p.is_file():
+            log.info(f"model found: {p}")
             return p
+    log.warning("no model file found — will use demo response")
     return None
 
 
@@ -62,11 +68,18 @@ def _load_model():
     if model_path is None:
         _model_loaded = True
         return
+    log.info(f"loading model from {model_path} …")
     try:
+        import torch
         from ultralytics import YOLO
         _model = YOLO(str(model_path))
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        if device == "cuda":
+            _model.to("cuda")
         _model_loaded = True
-    except Exception:
+        log.info(f"model loaded OK device={device}")
+    except Exception as exc:
+        log.error(f"model load FAILED: {exc!r} — falling back to demo mode")
         _model_loaded = True
 
 
@@ -75,13 +88,17 @@ def run_inference(image_bytes: bytes) -> DetectResponse:
 
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     img_w, img_h = image.size
+    log.debug(f"image decoded size={img_w}×{img_h}")
 
     if _model is None:
-        # Return demo detections if model not found
+        log.info("demo mode: no model loaded, returning fixed demo detections")
         return _demo_response(img_w, img_h)
 
     t0 = time.perf_counter()
-    results = _model.predict(image, conf=0.25, verbose=False)
+    import torch
+    device = 0 if torch.cuda.is_available() else "cpu"
+    log.debug(f"inference start device={device}")
+    results = _model.predict(image, conf=0.25, verbose=False, device=device)
     elapsed_ms = (time.perf_counter() - t0) * 1000
 
     detections: list[BBox] = []
@@ -110,6 +127,10 @@ def run_inference(image_bytes: bytes) -> DetectResponse:
                 severity=_severity(conf),
             ))
 
+    log.info(
+        f"inference done detections={len(detections)} elapsed={elapsed_ms:.1f}ms "
+        f"classes={[d.class_name for d in detections]}"
+    )
     return DetectResponse(
         detections=detections,
         image_width=img_w,

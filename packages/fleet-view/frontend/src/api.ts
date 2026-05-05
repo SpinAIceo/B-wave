@@ -4,20 +4,27 @@ import type {
   Inspection,
   Vessel,
 } from './types';
+import { logger } from './lib/logger';
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? '') + '/api/v1';
-const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+const USE_MOCKS = !import.meta.env.VITE_API_URL || import.meta.env.VITE_USE_MOCKS === 'true';
 
-async function fetchOrMock<T>(fetcher: () => Promise<T>, mockData: T): Promise<T> {
+logger.info('api', `mode=${USE_MOCKS ? 'MOCK' : 'LIVE'} base=${API_BASE}`);
+
+async function fetchOrMock<T>(label: string, fetcher: () => Promise<T>, mockData: T): Promise<T> {
+  if (USE_MOCKS) {
+    logger.debug('api', `[mock] ${label}`);
+    return mockData;
+  }
+  const timer = logger.time('api', label);
   try {
     const result = await fetcher();
+    timer.end('OK');
     return result;
   } catch (e) {
-    if (USE_MOCKS) {
-      console.warn('[dev] API unreachable, using mock data');
-      return mockData;
-    }
-    throw e;
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.warn('api', `${label} FAILED (${msg}) — falling back to mock`);
+    return mockData;
   }
 }
 
@@ -69,6 +76,7 @@ const MOCK_OVERVIEW: DashboardOverview = {
 
 export function fetchVessels(): Promise<Vessel[]> {
   return fetchOrMock(
+    'GET /api/v1/vessels',
     () => fetch(`${API_BASE}/vessels`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
     MOCK_VESSELS,
   );
@@ -76,6 +84,7 @@ export function fetchVessels(): Promise<Vessel[]> {
 
 export function fetchVessel(id: string): Promise<Vessel | undefined> {
   return fetchOrMock(
+    `GET /api/v1/vessels/${id}`,
     () => fetch(`${API_BASE}/vessels/${id}`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
     MOCK_VESSELS.find(v => v.id === id),
   );
@@ -83,6 +92,7 @@ export function fetchVessel(id: string): Promise<Vessel | undefined> {
 
 export function fetchDashboardOverview(): Promise<DashboardOverview> {
   return fetchOrMock(
+    'GET /api/v1/dashboard/overview',
     () => fetch(`${API_BASE}/dashboard/overview`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
     MOCK_OVERVIEW,
   );
@@ -93,6 +103,7 @@ export function fetchInspections(vesselId?: string): Promise<Inspection[]> {
     ? MOCK_INSPECTIONS.filter(i => i.vesselId === vesselId)
     : MOCK_INSPECTIONS;
   return fetchOrMock(
+    `GET /api/v1/vessels/${vesselId ?? 'all'}/inspections`,
     () => fetch(`${API_BASE}/vessels/${vesselId ?? 'all'}/inspections`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
     filtered,
   );
@@ -100,13 +111,16 @@ export function fetchInspections(vesselId?: string): Promise<Inspection[]> {
 
 export function fetchDetections(inspectionId: string): Promise<Detection[]> {
   return fetchOrMock(
+    `GET /api/v1/inspections/${inspectionId}/detections`,
     () => fetch(`${API_BASE}/inspections/${inspectionId}/detections`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
     [],
   );
 }
 
 export function triggerReport(vesselId: string, type: string): Promise<{ reportId: string }> {
+  logger.info('api', `triggerReport vessel=${vesselId} type=${type}`);
   return fetchOrMock(
+    'POST /api/v1/reports/generate',
     () => fetch(`${API_BASE}/reports/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
