@@ -4,18 +4,22 @@ import Dashboard from './pages/Dashboard';
 import FleetMap from './pages/FleetMap';
 import VesselList from './pages/VesselList';
 import Reports from './pages/Reports';
+import LogViewer from './pages/LogViewer';
+import { useT } from './lib/i18n';
 
-type Page = 'dashboard' | 'map' | 'vessels' | 'reports';
-
-const NAV_ITEMS: { id: Page; label: string; icon: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-  { id: 'map', label: 'Fleet Map', icon: '🗺️' },
-  { id: 'vessels', label: 'Vessels', icon: '🚢' },
-  { id: 'reports', label: 'Reports', icon: '📋' },
-];
+type Page = 'dashboard' | 'map' | 'vessels' | 'reports' | 'logs';
 
 export default function App() {
+  const t = useT();
   const [page, setPage] = useState<Page>('dashboard');
+
+  const NAV_ITEMS: { id: Page; label: string; icon: string }[] = [
+    { id: 'dashboard', label: t('navDashboard'), icon: '📊' },
+    { id: 'map', label: t('navFleetMap'), icon: '🗺️' },
+    { id: 'vessels', label: t('navVessels'), icon: '🚢' },
+    { id: 'reports', label: t('navReports'), icon: '📋' },
+    { id: 'logs', label: t('navLogs'), icon: '🔴' },
+  ];
 
   const renderPage = () => {
     switch (page) {
@@ -23,6 +27,7 @@ export default function App() {
       case 'map': return <FleetMap />;
       case 'vessels': return <VesselList />;
       case 'reports': return <Reports />;
+      case 'logs': return <LogViewer />;
     }
   };
 
@@ -31,7 +36,7 @@ export default function App() {
       <aside className="sidebar">
         <div className="sidebar-header">
           <h1>B-Wave</h1>
-          <span>Fleet View Dashboard</span>
+          <span>{t('appSubtitle')}</span>
         </div>
         <nav className="sidebar-nav">
           {NAV_ITEMS.map(item => (

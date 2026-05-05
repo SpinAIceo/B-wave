@@ -7,6 +7,22 @@ from pathlib import Path
 
 from app.logger import get_logger
 
+# SQLite exception → 한국어/영어 원인 분류
+_SQLITE_ERR_LABELS: dict[type, tuple[str, str]] = {
+    sqlite3.OperationalError:  ("DB 연결/잠금 오류", "connection/lock error"),
+    sqlite3.IntegrityError:    ("제약 조건 위반", "constraint violation"),
+    sqlite3.DatabaseError:     ("DB 파일 손상 가능", "database corruption possible"),
+    sqlite3.ProgrammingError:  ("SQL 쿼리 오류", "SQL programming error"),
+    sqlite3.InterfaceError:    ("DB 인터페이스 오류", "interface error"),
+}
+
+
+def _classify_exc(exc: Exception) -> str:
+    for exc_type, (ko, en) in _SQLITE_ERR_LABELS.items():
+        if isinstance(exc, exc_type):
+            return f"{type(exc).__name__} | KO: {ko} / EN: {en}"
+    return f"{type(exc).__name__} | 알 수 없는 DB 오류 / unknown DB error"
+
 log = get_logger("bwave.db")
 
 DB_PATH = Path("/tmp/bwave.db")
@@ -70,7 +86,7 @@ def save_scan(vessel_id: str, filename: str, result) -> str:
                 )
         log.debug(f"save_scan committed scan={scan_id}")
     except Exception as exc:
-        log.error(f"save_scan FAILED scan={scan_id}: {exc!r}")
+        log.error(f"save_scan FAILED scan={scan_id} {_classify_exc(exc)} detail={exc!r}")
         raise
     return scan_id
 
@@ -87,10 +103,11 @@ def get_scans(vessel_id: str | None = None) -> list[dict]:
                 rows = conn.execute(
                     "SELECT * FROM scans ORDER BY scanned_at DESC"
                 ).fetchall()
-        log.debug(f"get_scans vessel={vessel_id or 'all'} count={len(rows)}")
-        return [dict(r) for r in rows]
+        result = [dict(r) for r in rows]
+        log.debug(f"get_scans op=SELECT vessel={vessel_id or 'all'} rows={len(result)}")
+        return result
     except Exception as exc:
-        log.error(f"get_scans FAILED: {exc!r}")
+        log.error(f"get_scans FAILED op=SELECT vessel={vessel_id} {_classify_exc(exc)} detail={exc!r}")
         raise
 
 
@@ -100,10 +117,11 @@ def get_detections(scan_id: str) -> list[dict]:
             rows = conn.execute(
                 "SELECT * FROM detections WHERE scan_id=?", (scan_id,)
             ).fetchall()
-        log.debug(f"get_detections scan={scan_id} count={len(rows)}")
-        return [dict(r) for r in rows]
+        result = [dict(r) for r in rows]
+        log.debug(f"get_detections op=SELECT scan={scan_id} rows={len(result)}")
+        return result
     except Exception as exc:
-        log.error(f"get_detections FAILED scan={scan_id}: {exc!r}")
+        log.error(f"get_detections FAILED op=SELECT scan={scan_id} {_classify_exc(exc)} detail={exc!r}")
         raise
 
 
@@ -114,10 +132,10 @@ def defect_stats() -> dict[str, int]:
                 "SELECT class_name, COUNT(*) cnt FROM detections GROUP BY class_name"
             ).fetchall()
         result = {r["class_name"]: r["cnt"] for r in rows}
-        log.debug(f"defect_stats {result}")
+        log.debug(f"defect_stats op=AGGREGATE rows={len(result)} result={result}")
         return result
     except Exception as exc:
-        log.error(f"defect_stats FAILED: {exc!r}")
+        log.error(f"defect_stats FAILED op=AGGREGATE {_classify_exc(exc)} detail={exc!r}")
         raise
 
 
@@ -134,8 +152,8 @@ def vessel_stats() -> dict[str, dict]:
                 GROUP BY s.vessel_id
             """).fetchall()
         result = {r["vessel_id"]: dict(r) for r in rows}
-        log.debug(f"vessel_stats vessels={list(result.keys())}")
+        log.debug(f"vessel_stats op=JOIN_AGGREGATE vessels={list(result.keys())}")
         return result
     except Exception as exc:
-        log.error(f"vessel_stats FAILED: {exc!r}")
+        log.error(f"vessel_stats FAILED op=JOIN_AGGREGATE {_classify_exc(exc)} detail={exc!r}")
         raise

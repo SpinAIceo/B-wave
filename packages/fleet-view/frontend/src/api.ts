@@ -23,7 +23,11 @@ async function fetchOrMock<T>(label: string, fetcher: () => Promise<T>, mockData
     return result;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    logger.warn('api', `${label} FAILED (${msg}) — falling back to mock`);
+    // 프로덕션에서 fallback 발생 = 실제 장애 — warn → error로 격상
+    logger.error('api',
+      `[PROD FALLBACK] ${label} → mock으로 대체됨 | API unreachable, serving stale mock data`,
+      { endpoint: label, error: msg, errType: e instanceof Error ? e.constructor.name : typeof e }
+    );
     return mockData;
   }
 }

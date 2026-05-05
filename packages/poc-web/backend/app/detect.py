@@ -200,6 +200,22 @@ def run_inference(image_bytes: bytes) -> DetectResponse:
             psc_desc = _PSC_DESC_EN.get(psc_code, "Unknown deficiency")
             severity = _severity(conf)
 
+            # ── 도메인 검증 (Domain validation warnings) ──────────────────
+            if not (0.0 < conf <= 1.0):
+                log.warning(f"  [WARN] 비정상 confidence | unusual conf={conf:.4f} cls={cls_name}")
+            if cls_name == "unknown":
+                log.warning(f"  [WARN] 미분류 클래스 | unknown class cls_id={cls_id}")
+            if psc_code == "9999":
+                log.warning(f"  [WARN] PSC 미매핑 | unmapped PSC cls={cls_name} → psc_code=9999")
+            x1, y1, x2, y2 = xyxy[0], xyxy[1], xyxy[2], xyxy[3]
+            if x1 < 0 or y1 < 0 or x2 > img_w or y2 > img_h:
+                log.warning(
+                    f"  [WARN] bbox 이미지 범위 초과 | bbox out of bounds "
+                    f"[{x1:.0f},{y1:.0f},{x2:.0f},{y2:.0f}] img={img_w}×{img_h}"
+                )
+            if x2 <= x1 or y2 <= y1:
+                log.warning(f"  [WARN] bbox 넓이 0 이하 | degenerate bbox [{x1:.0f},{y1:.0f},{x2:.0f},{y2:.0f}]")
+
             detections.append(BBox(
                 x_min=float(xyxy[0]),
                 y_min=float(xyxy[1]),

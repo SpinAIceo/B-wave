@@ -160,8 +160,15 @@ export default function SandboxPage() {
       logger.info("sandbox", `[STEP 4/${totalSteps}] 응답 파싱 | Response parse`);
       logger.info("sandbox", `  HTTP 상태(status)  : ${res.status} ${res.statusText}`);
       logger.info("sandbox", `  Content-Type       : ${res.headers.get("content-type") ?? "unknown"}`);
+      // ── request-ID 상관 (trace correlation) ─────────────────────────────
+      const serverReqId = res.headers.get("x-request-id");
+      if (serverReqId) {
+        logger.info("sandbox", `  X-Request-ID       : ${serverReqId}  ← 백엔드 로그와 이 ID로 연결 | correlate backend logs with this ID`);
+      } else {
+        logger.warn("sandbox", `  X-Request-ID       : 없음 (헤더 미노출) | header not exposed`);
+      }
       if (!res.ok) {
-        logger.error("sandbox", `  ✗ HTTP 오류 | HTTP error — status=${res.status}`);
+        logger.error("sandbox", `  ✗ HTTP 오류 | HTTP error — status=${res.status} req_id=${serverReqId ?? "?"}`);;
         throw new Error(`Server error: ${res.status}`);
       }
       const data: DetectResult = await res.json();
@@ -210,11 +217,25 @@ export default function SandboxPage() {
       setResult(data);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Request failed";
+      // ── 오류 유형 분류 (Error category classification) ─────────────────
+      let errCategory = "UNKNOWN";
+      if (e instanceof TypeError && msg.includes("fetch")) {
+        errCategory = "NETWORK_FAIL";        // CORS, 서버 다운, DNS 오류
+      } else if (e instanceof SyntaxError) {
+        errCategory = "JSON_PARSE_FAIL";     // 응답이 JSON 아님
+      } else if (msg.startsWith("Server error:")) {
+        errCategory = `HTTP_${msg.split(":")[1]?.trim() ?? "ERR"}`;
+      } else if (msg.toLowerCase().includes("timeout")) {
+        errCategory = "TIMEOUT";
+      }
       logger.error("sandbox", `${"─".repeat(60)}`);
-      logger.error("sandbox", `✗ 파이프라인 오류 | Pipeline error: ${msg}`, e);
-      logger.error("sandbox", `  오류 유형(type) : ${e instanceof Error ? e.constructor.name : typeof e}`);
-      logger.error("sandbox", `  API 주소(url)   : ${url}`);
-      logger.error("sandbox", `${"═".repeat(60)}\n`);
+      logger.error("sandbox", `✗ 파이프라인 오류 | Pipeline error`);
+      logger.error("sandbox", `  오류 분류(category) : ${errCategory}`);
+      logger.error("sandbox", `  오류 유형(type)     : ${e instanceof Error ? e.constructor.name : typeof e}`);
+      logger.error("sandbox", `  메시지(message)     : ${msg}`);
+      logger.error("sandbox", `  API 주소(url)       : ${url}`);
+      logger.error("sandbox", `  → 백엔드 로그 검색: X-Request-ID로 추적하세요`);
+      logger.error("sandbox", `${"═".repeat(60)}\n`, e);
       setError(msg);
     } finally {
       setLoading(false);

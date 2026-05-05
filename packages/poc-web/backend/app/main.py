@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from app.db import defect_stats, get_detections, get_scans, init_db, save_scan, vessel_stats
 from app.detect import run_inference
 from app.fleet import generate_fleet
-from app.logger import get_logger
+from app.logger import clear_error_logs, get_logger, query_error_logs, set_req_id
 from app.models import FleetResponse, LeadRequest, RiskRequest, RiskResponse, RoiRequest, RoiResponse
 from app.risk import calculate_risk
 from app.roi import calculate_roi
@@ -26,23 +26,30 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID"],  # let browser read the trace ID
 )
 
 
 @app.middleware("http")
 async def request_logger(request: Request, call_next):
     req_id = str(uuid.uuid4())[:8].upper()
+    set_req_id(req_id)  # propagate to ALL log calls in this request context
     t0 = time.perf_counter()
-    log.info(f"→ {req_id} {request.method} {request.url.path}")
+    log.info(f"→ {request.method} {request.url.path} client={request.client.host if request.client else '?'}")
     try:
         response = await call_next(request)
         ms = (time.perf_counter() - t0) * 1000
-        log.info(f"← {req_id} {response.status_code} [{ms:.1f}ms]")
+        log.info(f"← {response.status_code} [{ms:.1f}ms]")
+        response.headers["X-Request-ID"] = req_id  # frontend can correlate logs
         return response
     except Exception as exc:
         ms = (time.perf_counter() - t0) * 1000
-        log.error(f"← {req_id} UNHANDLED [{ms:.1f}ms] {exc!r}")
-        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+        log.error(f"← UNHANDLED [{ms:.1f}ms] exc_type={type(exc).__name__} {exc!r}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
+            headers={"X-Request-ID": req_id},
+        )
 
 _VESSEL_IDS = ["V001", "V002", "V003", "V004", "V005"]
 
@@ -73,25 +80,25 @@ def health() -> dict:
 @app.post("/api/detect")
 async def detect(file: UploadFile = File(...), vessel_id: str = "V001"):
     if not file.content_type or not file.content_type.startswith("image/"):
-        log.warning(f"Rejected non-image upload: content_type={file.content_type}")
+        log.warning(f"[detect] rejected: content_type={file.content_type} vessel={vessel_id}")
         raise HTTPException(status_code=400, detail="File must be an image")
     contents = await file.read()
     size_kb = len(contents) / 1024
     if len(contents) > 20 * 1024 * 1024:
-        log.warning(f"Rejected oversized file: {size_kb:.0f}KB vessel={vessel_id}")
+        log.warning(f"[detect] rejected: oversized {size_kb:.0f}KB vessel={vessel_id}")
         raise HTTPException(status_code=413, detail="Image too large (max 20MB)")
-    log.info(f"detect start vessel={vessel_id} file={file.filename} size={size_kb:.0f}KB")
+    log.info(f"[detect] start vessel={vessel_id} file={file.filename} size={size_kb:.0f}KB")
     try:
         result = run_inference(contents)
         scan_id = save_scan(vessel_id, file.filename or "upload.jpg", result)
         log.info(
-            f"detect done vessel={vessel_id} scan={scan_id} "
+            f"[detect] done vessel={vessel_id} scan={scan_id} "
             f"defects={len(result.detections)} model={result.model_version} "
             f"inference={result.inference_ms}ms"
         )
         return result
     except Exception as exc:
-        log.error(f"detect failed vessel={vessel_id}: {exc!r}")
+        log.error(f"[detect] FAILED vessel={vessel_id} exc_type={type(exc).__name__} {exc!r}")
         raise HTTPException(status_code=500, detail="Inference failed") from exc
 
 
@@ -142,6 +149,33 @@ def ports():
 def leads(req: LeadRequest):
     log.info(f"LEAD email={req.email} company={req.company} fleet_size={req.fleet_size}")
     return {"status": "received", "message": "Thank you! Our team will contact you shortly."}
+
+
+# ── /api/v1/logs — 오류 로그 일괄 조회 시스템 ────────────────────────────────
+
+@app.get("/api/v1/logs")
+def v1_logs(level: str | None = None, req_id: str | None = None, limit: int = 100):
+    """
+    오류 로그 일괄 조회 | Batch error log review endpoint.
+    - ?level=ERROR|WARNING  — 레벨 필터
+    - ?req_id=XXXXXXXX      — 특정 요청 추적
+    - ?limit=N              — 최대 N건 (default 100)
+    """
+    rows = query_error_logs(level=level, req_id=req_id, limit=min(limit, 1000))
+    log.info(f"[logs] 조회 | query level={level or 'ALL'} req_id={req_id or 'ALL'} returned={len(rows)}")
+    return {
+        "count": len(rows),
+        "filters": {"level": level, "req_id": req_id, "limit": limit},
+        "logs": rows,
+    }
+
+
+@app.delete("/api/v1/logs")
+def v1_logs_clear():
+    """오류 로그 전체 삭제 | Clear all error logs."""
+    n = clear_error_logs()
+    log.info(f"[logs] 전체 삭제 | cleared {n} entries")
+    return {"deleted": n}
 
 
 # ── /api/v1/ endpoints for fleet-view ────────────────────────────────────────
