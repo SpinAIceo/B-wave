@@ -42,11 +42,42 @@ const CLASS_COLOR: Record<string, string> = {
   leak:   "text-purple-400",
 };
 
+// ── 언어별 라벨 테이블 (Bilingual label tables) ──────────────────────────────
+
 /** 결함 class_name → 한국어 표시명 */
 const CLASS_KO: Record<string, string> = {
   rust:   "부식",
   damage: "손상",
   leak:   "누수",
+};
+
+/** 결함 class_name → 영어 전체 명칭 */
+const CLASS_EN: Record<string, string> = {
+  rust:   "Rust / Corrosion",
+  damage: "Structural Damage",
+  leak:   "Oil / Water Leak",
+};
+
+/** PSC 코드 → 영어 설명 */
+const PSC_DESC_EN: Record<string, string> = {
+  "0615": "Hull corrosion / wastage",
+  "0630": "Structural deficiency",
+  "0950": "Oil / water leakage",
+};
+
+/** PSC 코드 → 한국어 설명 */
+const PSC_DESC_KO: Record<string, string> = {
+  "0615": "선체 부식/낭비",
+  "0630": "구조적 결함",
+  "0950": "오일/수분 누출",
+};
+
+/** 심각도 → 한국어 */
+const SEVERITY_KO: Record<string, string> = {
+  CRITICAL: "심각",
+  HIGH:     "높음",
+  MEDIUM:   "중간",
+  LOW:      "낮음",
 };
 
 const VESSELS = [
@@ -69,7 +100,11 @@ export default function SandboxPage() {
   const onDrop = useCallback((accepted: File[]) => {
     const file = accepted[0];
     if (!file) return;
-    logger.info("sandbox", `file selected name=${file.name} size=${(file.size/1024).toFixed(0)}KB type=${file.type}`);
+    logger.info("sandbox", "━━━ 파일 선택됨 | File selected ━━━");
+    logger.info("sandbox", `  이름(name)   : ${file.name}`);
+    logger.info("sandbox", `  크기(size)   : ${(file.size / 1024).toFixed(0)} KB`);
+    logger.info("sandbox", `  형식(type)   : ${file.type}`);
+    logger.info("sandbox", `  수정일(lastModified): ${new Date(file.lastModified).toISOString()}`);
     setImageFile(file);
     setImageUrl(URL.createObjectURL(file));
     setResult(null);
@@ -87,28 +122,99 @@ export default function SandboxPage() {
     if (!imageFile) return;
     setLoading(true);
     setError(null);
-    const timer = logger.time("sandbox", `POST /api/detect vessel=${vesselId}`);
-    logger.info("sandbox", `detect start file=${imageFile.name} vessel=${vesselId}`);
+
+    const totalSteps = 5;
+    logger.info("sandbox", `\n${"═".repeat(60)}`);
+    logger.info("sandbox", `🔍 PSC 분석 파이프라인 시작 | Analysis pipeline started`);
+    logger.info("sandbox", `${"═".repeat(60)}`);
+
+    // ── STEP 1/5: 파일 검증 (File validation) ──────────────────────────────
+    logger.info("sandbox", `[STEP 1/${totalSteps}] 파일 검증 | File validation`);
+    logger.info("sandbox", `  파일명(filename) : ${imageFile.name}`);
+    logger.info("sandbox", `  파일크기(size)   : ${(imageFile.size / 1024).toFixed(1)} KB`);
+    logger.info("sandbox", `  MIME 형식(type)  : ${imageFile.type}`);
+    logger.info("sandbox", `  선박(vessel)     : ${vesselId}`);
+    if (imageFile.size > 20 * 1024 * 1024) {
+      logger.error("sandbox", `  ✗ 파일 크기 초과 | File too large (max 20MB)`);
+      setError("파일 크기 20MB 초과");
+      setLoading(false);
+      return;
+    }
+    logger.info("sandbox", `  ✓ 검증 통과 | Validation passed`);
+
+    // ── STEP 2/5: FormData 생성 (FormData build) ───────────────────────────
+    logger.info("sandbox", `[STEP 2/${totalSteps}] FormData 생성 | FormData build`);
+    const form = new FormData();
+    form.append("file", imageFile);
+    const url = `${API}/api/detect?vessel_id=${vesselId}`;
+    logger.info("sandbox", `  엔드포인트(endpoint) : POST ${url}`);
+    logger.info("sandbox", `  요청 바디(body)      : multipart/form-data (file=${imageFile.name})`);
+
+    // ── STEP 3/5: API 요청 전송 (API request) ──────────────────────────────
+    logger.info("sandbox", `[STEP 3/${totalSteps}] API 요청 전송 | Sending API request`);
+    const timer = logger.time("sandbox", "API round-trip");
     try {
-      const form = new FormData();
-      form.append("file", imageFile);
-      const res = await fetch(`${API}/api/detect?vessel_id=${vesselId}`, { method: "POST", body: form });
+      const res = await fetch(url, { method: "POST", body: form });
+
+      // ── STEP 4/5: 응답 파싱 (Response parse) ─────────────────────────────
+      logger.info("sandbox", `[STEP 4/${totalSteps}] 응답 파싱 | Response parse`);
+      logger.info("sandbox", `  HTTP 상태(status)  : ${res.status} ${res.statusText}`);
+      logger.info("sandbox", `  Content-Type       : ${res.headers.get("content-type") ?? "unknown"}`);
       if (!res.ok) {
-        logger.error("sandbox", `detect HTTP error status=${res.status}`);
+        logger.error("sandbox", `  ✗ HTTP 오류 | HTTP error — status=${res.status}`);
         throw new Error(`Server error: ${res.status}`);
       }
       const data: DetectResult = await res.json();
-      timer.end(`defects=${data.detections.length} model=${data.model_version} inference=${data.inference_ms}ms`);
-      logger.info("sandbox", "detect result", {
-        defects: data.detections.length,
-        model: data.model_version,
-        inferenceMs: data.inference_ms,
-        classes: data.detections.map(d => d.class_name),
-      });
+      timer.end(`status=${res.status}`);
+      logger.info("sandbox", `  모델 버전(model)       : ${data.model_version}`);
+      logger.info("sandbox", `  추론 시간(inference)   : ${data.inference_ms} ms`);
+      logger.info("sandbox", `  이미지 크기(img size)  : ${data.image_width}×${data.image_height}px`);
+      logger.info("sandbox", `  탐지 건수(detections)  : ${data.detections.length}건`);
+
+      // ── STEP 5/5: 탐지 결과 처리 (Detection result processing) ──────────
+      logger.info("sandbox", `[STEP 5/${totalSteps}] 탐지 결과 처리 | Detection result processing`);
+      if (data.detections.length === 0) {
+        logger.info("sandbox", `  ✓ 결함 없음 (PSC 적합) | No defects found — PSC compliant`);
+      } else {
+        logger.info("sandbox", `  탐지된 결함 목록 | Detected defects:`);
+        data.detections.forEach((det, i) => {
+          const koClass  = CLASS_KO[det.class_name]  ?? det.class_name;
+          const enClass  = CLASS_EN[det.class_name]  ?? det.class_name;
+          const koDesc   = PSC_DESC_KO[det.psc_code] ?? "알 수 없음";
+          const enDesc   = PSC_DESC_EN[det.psc_code] ?? "Unknown";
+          const koSev    = SEVERITY_KO[det.severity] ?? det.severity;
+          const confPct  = (det.confidence * 100).toFixed(1);
+          logger.info("sandbox", `  ┌─ [결과 ${i + 1}/${data.detections.length}] ─────────────────────────────`);
+          logger.info("sandbox", `  │  클래스(class)  KO: ${koClass}  /  EN: ${enClass}`);
+          logger.info("sandbox", `  │  신뢰도(conf)   : ${confPct}%`);
+          logger.info("sandbox", `  │  심각도(severity) KO: ${koSev}  /  EN: ${det.severity}`);
+          logger.info("sandbox", `  │  PSC 코드       : ${det.psc_code}`);
+          logger.info("sandbox", `  │  PSC 설명 KO    : ${koDesc}`);
+          logger.info("sandbox", `  │  PSC 설명 EN    : ${enDesc}`);
+          logger.info("sandbox", `  │  바운딩박스(bbox): [${det.x_min.toFixed(0)}, ${det.y_min.toFixed(0)}] → [${det.x_max.toFixed(0)}, ${det.y_max.toFixed(0)}]`);
+          logger.info("sandbox", `  └────────────────────────────────────────────`);
+        });
+
+        // 심각도별 집계 로그 (Severity summary)
+        const sevCount: Record<string, number> = {};
+        data.detections.forEach(d => { sevCount[d.severity] = (sevCount[d.severity] ?? 0) + 1; });
+        const sevSummaryKo = Object.entries(sevCount).map(([s, c]) => `${SEVERITY_KO[s] ?? s}:${c}건`).join(", ");
+        const sevSummaryEn = Object.entries(sevCount).map(([s, c]) => `${s}:${c}`).join(", ");
+        logger.info("sandbox", `  📊 심각도 집계 KO | ${sevSummaryKo}`);
+        logger.info("sandbox", `  📊 severity summary EN | ${sevSummaryEn}`);
+      }
+
+      logger.info("sandbox", `${"─".repeat(60)}`);
+      logger.info("sandbox", `✅ 분석 완료 | Pipeline complete — ${data.detections.length}건 탐지 / ${data.inference_ms}ms`);
+      logger.info("sandbox", `${"═".repeat(60)}\n`);
       setResult(data);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Request failed";
-      logger.error("sandbox", `detect failed: ${msg}`, e);
+      logger.error("sandbox", `${"─".repeat(60)}`);
+      logger.error("sandbox", `✗ 파이프라인 오류 | Pipeline error: ${msg}`, e);
+      logger.error("sandbox", `  오류 유형(type) : ${e instanceof Error ? e.constructor.name : typeof e}`);
+      logger.error("sandbox", `  API 주소(url)   : ${url}`);
+      logger.error("sandbox", `${"═".repeat(60)}\n`);
       setError(msg);
     } finally {
       setLoading(false);
