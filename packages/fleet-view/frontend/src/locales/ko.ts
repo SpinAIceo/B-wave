@@ -47,7 +47,7 @@ const ko = {
 
   // Vessel List — search
   searchPlaceholder: '선박 검색...',
-  vesselCount: (n: number) => `${n}척`,
+  vesselCount: '{n}척',
 
   // Vessel List — table headers
   colName: '선박명',
@@ -129,13 +129,28 @@ const ko = {
   downloadPdf: 'PDF 다운로드',
   statusReady: '완료',
   statusGenerating: '생성 중',
-  downloading: (id: string) => `${id} 다운로드 중...`,
+  downloading: '{id} 다운로드 중...',
 
   // Report types
   reportPscReadiness: 'PSC 준비 상태 보고서',
   reportClassSurvey: '선급 검사 보고서',
   reportSecurityAudit: '보안 감사 (UR E26/E27)',
   reportCicCompliance: 'CIC 2026 준수 (화물 결박)',
+
+  // Zones
+  zone_bow: '선수',
+  zone_midship: '중앙',
+  zone_stern: '선미',
+  zone_deck: '갑판',
+  zone_hull: '선체',
+  zone_engine_room: '기관실',
+
+  // Vessel diagram
+  defectMap: '결함 위치 지도',
+  clickZoneToFilter: '구역을 클릭해서 결함을 필터하세요',
+  clearFilter: '전체 보기',
+  defectsInZone: '{zone}의 결함',
+  noDefectsInZone: '이 구역에 결함 없음',
 } as const;
 
 export default ko;

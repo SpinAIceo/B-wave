@@ -56,3 +56,8 @@ shared/gen/
 *.zip
 *.tar.gz
 yolo26*.pt
+
+# Runtime databases & build caches
+*.db
+*.db-journal
+*.tsbuildinfo

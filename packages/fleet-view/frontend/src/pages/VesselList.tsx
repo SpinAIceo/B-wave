@@ -2,10 +2,18 @@ import { useEffect, useState } from 'react';
 import { fetchVessels } from '../api';
 import type { Vessel } from '../types';
 import VesselDetail from './VesselDetail';
+import { useT } from '../lib/i18n';
 
 type SortKey = keyof Pick<Vessel, 'name' | 'type' | 'flag' | 'status' | 'lastInspection' | 'criticalDefects' | 'detentionRisk'>;
 
 export default function VesselList() {
+  const t = useT();
+  const STATUS_LABELS: Record<string, string> = {
+    sailing: t('statusSailing'),
+    port: t('statusPort'),
+    anchor: t('statusAnchor'),
+    maintenance: t('statusMaintenance'),
+  };
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('name');
@@ -32,7 +40,7 @@ export default function VesselList() {
   const statusBadge = (status: string) => {
     const cls = status === 'sailing' ? 'badge-success' : status === 'port' ? 'badge-info' :
       status === 'anchor' ? 'badge-warning' : 'badge-danger';
-    return <span className={`badge ${cls}`}>{status}</span>;
+    return <span className={`badge ${cls}`}>{STATUS_LABELS[status] ?? status}</span>;
   };
 
   const riskBadge = (risk: number) => {
@@ -49,23 +57,25 @@ export default function VesselList() {
     <div>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <input
-          type="text" className="search-input" placeholder="Search vessels..."
+          type="text" className="search-input" placeholder={t('searchPlaceholder')}
           value={search} onChange={e => setSearch(e.target.value)}
         />
-        <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>{filtered.length} vessels</span>
+        <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+          {t('vesselCount', { n: filtered.length })}
+        </span>
       </div>
 
       <div className="card">
         <table className="data-table">
           <thead>
             <tr>
-              <th onClick={() => handleSort('name')}>Name{arrow('name')}</th>
-              <th onClick={() => handleSort('type')}>Type{arrow('type')}</th>
-              <th onClick={() => handleSort('flag')}>Flag{arrow('flag')}</th>
-              <th onClick={() => handleSort('status')}>Status{arrow('status')}</th>
-              <th onClick={() => handleSort('lastInspection')}>Last Inspection{arrow('lastInspection')}</th>
-              <th onClick={() => handleSort('criticalDefects')}>Critical{arrow('criticalDefects')}</th>
-              <th onClick={() => handleSort('detentionRisk')}>Detention Risk{arrow('detentionRisk')}</th>
+              <th onClick={() => handleSort('name')}>{t('colName')}{arrow('name')}</th>
+              <th onClick={() => handleSort('type')}>{t('colType')}{arrow('type')}</th>
+              <th onClick={() => handleSort('flag')}>{t('colFlag')}{arrow('flag')}</th>
+              <th onClick={() => handleSort('status')}>{t('colStatus')}{arrow('status')}</th>
+              <th onClick={() => handleSort('lastInspection')}>{t('colLastInspection')}{arrow('lastInspection')}</th>
+              <th onClick={() => handleSort('criticalDefects')}>{t('colCritical')}{arrow('criticalDefects')}</th>
+              <th onClick={() => handleSort('detentionRisk')}>{t('colDetentionRisk')}{arrow('detentionRisk')}</th>
             </tr>
           </thead>
           <tbody>

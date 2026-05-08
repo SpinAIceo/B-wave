@@ -1,0 +1,238 @@
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+
+import '../../data/models/defect.dart';
+import 'report_provider.dart';
+
+Future<void> exportReportAsPdf(ReportState report) async {
+  final pdf = pw.Document();
+
+  pdf.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(32),
+      build: (context) => [
+        // ── Header ────────────────────────────────────────────────────────
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('B-Wave PSC Inspection Report',
+                    style: pw.TextStyle(
+                        fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 4),
+                pw.Text('Generated: ${DateTime.now().toString().substring(0, 16)}',
+                    style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
+              ],
+            ),
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: pw.BoxDecoration(
+                color: report.criticalCount > 0 ? PdfColors.red100 : PdfColors.green100,
+                borderRadius: pw.BorderRadius.circular(4),
+                border: pw.Border.all(
+                  color: report.criticalCount > 0 ? PdfColors.red : PdfColors.green,
+                ),
+              ),
+              child: pw.Text(
+                report.criticalCount > 0 ? 'ACTION REQUIRED' : 'PASS',
+                style: pw.TextStyle(
+                  fontSize: 12,
+                  fontWeight: pw.FontWeight.bold,
+                  color: report.criticalCount > 0 ? PdfColors.red : PdfColors.green,
+                ),
+              ),
+            ),
+          ],
+        ),
+        pw.Divider(height: 24),
+
+        // ── Vessel Info ────────────────────────────────────────────────────
+        _sectionTitle('Vessel Information'),
+        _infoRow('Vessel', report.vesselName),
+        _infoRow('Inspector', report.inspectorId),
+        _infoRow('Port of Inspection', report.portName),
+        _infoRow('Inspection Date', report.inspectionDate.toString().substring(0, 10)),
+        pw.SizedBox(height: 16),
+
+        // ── Summary ────────────────────────────────────────────────────────
+        _sectionTitle('Summary'),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+          children: [
+            _summaryBox('Total Defects', '${report.totalDefects}',
+                report.totalDefects > 0 ? PdfColors.orange : PdfColors.green),
+            _summaryBox('Critical', '${report.criticalCount}',
+                report.criticalCount > 0 ? PdfColors.red : PdfColors.green),
+            _summaryBox('Scans', '${report.results.length}', PdfColors.blue),
+            _summaryBox('Avg Time', '${report.avgInferenceTime.toStringAsFixed(0)}ms',
+                PdfColors.grey700),
+          ],
+        ),
+        pw.SizedBox(height: 16),
+
+        // ── AI Detected Defects (grouped by Zone) ──────────────────────────
+        if (report.allDefects.isNotEmpty) ...[
+          _sectionTitle('AI-Detected Defects (by Zone)'),
+          ..._defectsByZoneSections(report),
+          pw.SizedBox(height: 16),
+        ],
+
+        // ── Checklist Failures ─────────────────────────────────────────────
+        if (report.checklistFailures.isNotEmpty) ...[
+          _sectionTitle('Manual Checklist Failures'),
+          ...report.checklistFailures.map(
+            (desc) => pw.Padding(
+              padding: const pw.EdgeInsets.only(bottom: 4),
+              child: pw.Row(
+                children: [
+                  pw.Container(
+                    width: 8, height: 8,
+                    decoration: const pw.BoxDecoration(
+                        shape: pw.BoxShape.circle, color: PdfColors.red),
+                  ),
+                  pw.SizedBox(width: 8),
+                  pw.Text(desc, style: const pw.TextStyle(fontSize: 11)),
+                ],
+              ),
+            ),
+          ),
+          pw.SizedBox(height: 16),
+        ],
+
+        // ── Recommended Actions ────────────────────────────────────────────
+        _sectionTitle('Recommended Actions'),
+        pw.Text(
+          report.criticalCount > 0
+              ? 'IMMEDIATE ACTION REQUIRED: Address all CRITICAL items before next port call. '
+                'Notify management company and flag state administration as required.'
+              : 'No critical defects detected. Continue regular maintenance schedule '
+                'and address any identified items at next scheduled maintenance period.',
+          style: const pw.TextStyle(fontSize: 11),
+        ),
+
+        pw.SizedBox(height: 24),
+        pw.Divider(),
+        pw.Text(
+          'This report was generated by B-Wave PSC Defect Scanner v0.1.0\n'
+          'Powered by YOLOv8 AI inference engine | Spinai Corp.',
+          style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey500),
+        ),
+      ],
+    ),
+  );
+
+  await Printing.layoutPdf(onLayout: (_) async => pdf.save());
+}
+
+pw.Widget _sectionTitle(String title) => pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 8),
+      child: pw.Text(title,
+          style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+    );
+
+/// Groups defects by zone and renders a sub-table per non-empty zone.
+List<pw.Widget> _defectsByZoneSections(ReportState report) {
+  final sections = <pw.Widget>[];
+  for (final zone in Zone.values) {
+    final defects = report.allDefects.where((d) => d.zone == zone).toList();
+    if (defects.isEmpty) continue;
+    sections.add(
+      pw.Padding(
+        padding: const pw.EdgeInsets.only(top: 6, bottom: 4),
+        child: pw.Row(
+          children: [
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.blue900,
+                borderRadius: pw.BorderRadius.circular(3),
+              ),
+              child: pw.Text(
+                zone.displayName,
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.white,
+                ),
+              ),
+            ),
+            pw.SizedBox(width: 6),
+            pw.Text(
+              '${defects.length} defects',
+              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+            ),
+          ],
+        ),
+      ),
+    );
+    sections.add(
+      pw.Table(
+        border: pw.TableBorder.all(color: PdfColors.grey300),
+        columnWidths: {
+          0: const pw.FlexColumnWidth(2),
+          1: const pw.FlexColumnWidth(1.5),
+          2: const pw.FlexColumnWidth(1),
+          3: const pw.FlexColumnWidth(1),
+        },
+        children: [
+          pw.TableRow(
+            decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+            children: ['Defect Type', 'PSC Code', 'Severity', 'Confidence']
+                .map((h) => _tableHeader(h))
+                .toList(),
+          ),
+          ...defects.map((d) => pw.TableRow(children: [
+                _tableCell(d.defectType.displayName),
+                _tableCell(d.pscCode),
+                _tableCell(d.severity.label),
+                _tableCell(d.confidencePercent),
+              ])),
+        ],
+      ),
+    );
+  }
+  return sections;
+}
+
+pw.Widget _infoRow(String label, String value) => pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 4),
+      child: pw.Row(children: [
+        pw.SizedBox(
+          width: 140,
+          child: pw.Text(label,
+              style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey700)),
+        ),
+        pw.Text(value, style: const pw.TextStyle(fontSize: 11)),
+      ]),
+    );
+
+pw.Widget _summaryBox(String label, String value, PdfColor color) =>
+    pw.Container(
+      padding: const pw.EdgeInsets.all(8),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: color),
+        borderRadius: pw.BorderRadius.circular(4),
+      ),
+      child: pw.Column(children: [
+        pw.Text(value,
+            style: pw.TextStyle(
+                fontSize: 20, fontWeight: pw.FontWeight.bold, color: color)),
+        pw.Text(label,
+            style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
+      ]),
+    );
+
+pw.Widget _tableHeader(String text) => pw.Padding(
+      padding: const pw.EdgeInsets.all(6),
+      child: pw.Text(text,
+          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+    );
+
+pw.Widget _tableCell(String text) => pw.Padding(
+      padding: const pw.EdgeInsets.all(6),
+      child: pw.Text(text, style: const pw.TextStyle(fontSize: 10)),
+    );

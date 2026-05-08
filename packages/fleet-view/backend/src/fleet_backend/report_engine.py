@@ -3,24 +3,24 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from .models import AuditReport, ReportFormat
+from .models import AuditReport, ReportFormat, Zone
 from .store import DataStore
 
 SUPPORTED_REPORT_TYPES = {"psc_readiness", "class_survey", "security_audit", "cic_compliance"}
 
 
 class ReportEngine:
-    def __init__(self, store: DataStore) -> None:
-        self.store = store
+    def __init__(self) -> None:
         self.reports: dict[str, AuditReport] = {}
 
-    def generate_audit_report(
+    async def generate_audit_report(
         self,
+        store: DataStore,
         vessel_id: str,
         report_type: str = "psc_readiness",
         fmt: ReportFormat = ReportFormat.PDF,
     ) -> AuditReport:
-        vessel = self.store.get_vessel(vessel_id)
+        vessel = await store.get_vessel(vessel_id)
         if vessel is None:
             raise ValueError(f"Vessel {vessel_id} not found")
         if report_type not in SUPPORTED_REPORT_TYPES:
@@ -42,17 +42,17 @@ class ReportEngine:
     def get_report(self, report_id: str) -> AuditReport | None:
         return self.reports.get(report_id)
 
-    def generate_fleet_summary(self) -> dict:
-        vessels = self.store.get_vessels()
-        all_detections = self.store.get_all_detections()
-        overview = self.store.get_dashboard_overview()
+    async def generate_fleet_summary(self, store: DataStore) -> dict:
+        vessels = await store.get_vessels()
+        all_detections = await store.get_all_detections()
+        overview = await store.get_dashboard_overview()
 
         vessel_summaries = []
         for v in vessels:
-            inspections = self.store.get_inspections(v.id)
+            inspections = await store.get_inspections(v.id)
             total_defects = 0
             for ins in inspections:
-                total_defects += len(self.store.get_detections(ins.id))
+                total_defects += len(await store.get_detections(ins.id))
             vessel_summaries.append({
                 "vessel_id": v.id,
                 "vessel_name": v.name,
@@ -69,27 +69,37 @@ class ReportEngine:
             "total_detections": len(all_detections),
         }
 
-    def generate_report_data(self, vessel_id: str, report_type: str) -> dict:
-        vessel = self.store.get_vessel(vessel_id)
+    async def generate_report_data(self, store: DataStore, vessel_id: str, report_type: str) -> dict:
+        vessel = await store.get_vessel(vessel_id)
         if vessel is None:
             return {}
 
-        inspections = self.store.get_inspections(vessel_id)
+        inspections = await store.get_inspections(vessel_id)
         detections = []
         for ins in inspections:
-            detections.extend(self.store.get_detections(ins.id))
+            detections.extend(await store.get_detections(ins.id))
 
-        base = {
+        # Zone breakdown — aggregate counts and group detections per zone
+        # so that consumers (PDF templates, audit boards) can surface
+        # location-specific findings.
+        zone_summary: dict[str, int] = {z.value: 0 for z in Zone}
+        zone_groups: dict[str, list[dict]] = {z.value: [] for z in Zone}
+        for d in detections:
+            zone_value = d.zone.value
+            zone_summary[zone_value] = zone_summary.get(zone_value, 0) + 1
+            zone_groups.setdefault(zone_value, []).append(d.model_dump())
+
+        base: dict = {
             "vessel": vessel.model_dump(),
             "inspections": [i.model_dump() for i in inspections],
             "detections": [d.model_dump() for d in detections],
+            "zone_summary": zone_summary,
+            "zone_groups": zone_groups,
         }
 
         if report_type == "psc_readiness":
             base["readiness_score"] = _compute_readiness(inspections)
-            base["recommendation"] = (
-                "Address all CRITICAL and HIGH severity items before port call."
-            )
+            base["recommendation"] = "Address all CRITICAL and HIGH severity items before port call."
         elif report_type == "class_survey":
             base["survey_standard"] = "DNV GL Rules for Classification"
             base["compliance_status"] = "CONDITIONAL" if detections else "COMPLIANT"

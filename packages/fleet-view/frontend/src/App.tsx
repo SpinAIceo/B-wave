@@ -5,6 +5,7 @@ import FleetMap from './pages/FleetMap';
 import VesselList from './pages/VesselList';
 import Reports from './pages/Reports';
 import LogViewer from './pages/LogViewer';
+import LanguageSwitcher from './components/LanguageSwitcher';
 import { useT } from './lib/i18n';
 
 type Page = 'dashboard' | 'map' | 'vessels' | 'reports' | 'logs';
@@ -56,7 +57,8 @@ export default function App() {
           <span className="topbar-title">
             {NAV_ITEMS.find(n => n.id === page)?.label}
           </span>
-          <div className="topbar-actions">
+          <div className="topbar-actions" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <LanguageSwitcher />
             <span style={{ cursor: 'pointer', fontSize: 20 }}>🔔</span>
             <span
               style={{

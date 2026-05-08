@@ -3,6 +3,10 @@ export type DefectType = 'rust' | 'damage' | 'leak' | 'missing_label' | 'cargo_l
 export type Severity = 'low' | 'medium' | 'high' | 'critical';
 export type MoURegion = 'Tokyo' | 'Paris' | 'Indian Ocean' | 'Abuja' | 'USCG';
 
+export const ZONES = ['bow', 'midship', 'stern', 'deck', 'hull', 'engine_room'] as const;
+export type Zone = typeof ZONES[number];
+export const DEFAULT_ZONE: Zone = 'midship';
+
 export interface Vessel {
   id: string;
   name: string;
@@ -38,6 +42,7 @@ export interface Detection {
   pscCode: string;
   severity: Severity;
   bbox: { xMin: number; yMin: number; xMax: number; yMax: number };
+  zone: Zone;
 }
 
 export interface DashboardOverview {
@@ -66,11 +71,11 @@ export const DEFECT_COLORS: Record<DefectType, string> = {
 };
 
 export const DEFECT_LABELS: Record<DefectType, string> = {
-  rust: 'Rust',
-  damage: 'Damage',
-  leak: 'Leak',
-  missing_label: 'Missing Label',
-  cargo_lashing: 'Cargo Lashing',
+  rust: '부식',
+  damage: '손상',
+  leak: '누수',
+  missing_label: '라벨 누락',
+  cargo_lashing: '화물 결박',
 };
 
 export const STATUS_COLORS: Record<VesselStatus, string> = {

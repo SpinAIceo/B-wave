@@ -40,6 +40,32 @@ enum DefectType {
   }
 }
 
+enum Zone {
+  bow('bow', 'Bow', '선수'),
+  midship('midship', 'Midship', '중앙'),
+  stern('stern', 'Stern', '선미'),
+  deck('deck', 'Deck', '갑판'),
+  hull('hull', 'Hull', '선체'),
+  engineRoom('engine_room', 'Engine Room', '기관실');
+
+  const Zone(this.code, this.displayNameEn, this.displayNameKo);
+
+  final String code;
+  final String displayNameEn;
+  final String displayNameKo;
+
+  String get displayName => displayNameKo;
+
+  static Zone fromCode(String code) {
+    return Zone.values.firstWhere(
+      (e) => e.code == code,
+      orElse: () => Zone.midship,
+    );
+  }
+}
+
+const Zone defaultZone = Zone.midship;
+
 enum Severity {
   low(1, 'LOW'),
   medium(2, 'MEDIUM'),
@@ -78,6 +104,7 @@ class Defect {
   final double confidence;
   final String pscCode;
   final Severity severity;
+  final Zone zone;
 
   const Defect({
     required this.bbox,
@@ -85,8 +112,20 @@ class Defect {
     required this.confidence,
     required this.pscCode,
     required this.severity,
+    this.zone = defaultZone,
   });
 
   String get confidencePercent => '${(confidence * 100).toStringAsFixed(0)}%';
   String get label => '${defectType.displayName} $confidencePercent $pscCode';
+
+  Defect copyWith({Zone? zone}) {
+    return Defect(
+      bbox: bbox,
+      defectType: defectType,
+      confidence: confidence,
+      pscCode: pscCode,
+      severity: severity,
+      zone: zone ?? this.zone,
+    );
+  }
 }

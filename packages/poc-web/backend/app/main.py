@@ -78,7 +78,11 @@ def health() -> dict:
 # ── Core endpoints ────────────────────────────────────────────────────────────
 
 @app.post("/api/detect")
-async def detect(file: UploadFile = File(...), vessel_id: str = "V001"):
+async def detect(
+    file: UploadFile = File(...),
+    vessel_id: str = "V001",
+    zone: str = "midship",
+):
     if not file.content_type or not file.content_type.startswith("image/"):
         log.warning(f"[detect] rejected: content_type={file.content_type} vessel={vessel_id}")
         raise HTTPException(status_code=400, detail="File must be an image")
@@ -87,10 +91,10 @@ async def detect(file: UploadFile = File(...), vessel_id: str = "V001"):
     if len(contents) > 20 * 1024 * 1024:
         log.warning(f"[detect] rejected: oversized {size_kb:.0f}KB vessel={vessel_id}")
         raise HTTPException(status_code=413, detail="Image too large (max 20MB)")
-    log.info(f"[detect] start vessel={vessel_id} file={file.filename} size={size_kb:.0f}KB")
+    log.info(f"[detect] start vessel={vessel_id} zone={zone} file={file.filename} size={size_kb:.0f}KB")
     try:
         result = run_inference(contents)
-        scan_id = save_scan(vessel_id, file.filename or "upload.jpg", result)
+        scan_id = save_scan(vessel_id, file.filename or "upload.jpg", result, zone=zone)
         log.info(
             f"[detect] done vessel={vessel_id} scan={scan_id} "
             f"defects={len(result.detections)} model={result.model_version} "

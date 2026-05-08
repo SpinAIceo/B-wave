@@ -1,8 +1,11 @@
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/defect.dart';
+import '../../data/services/inspection_session.dart';
+import '../../widgets/vessel_diagram.dart';
 import 'defect_overlay_painter.dart';
 import 'scan_controller.dart';
 
@@ -36,14 +39,69 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
     super.dispose();
   }
 
+  void _openZonePicker(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final session = ref.watch(inspectionSessionProvider);
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF1a1a2e),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('점검 구역 선택',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                  IconButton(icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: () => Navigator.pop(ctx)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                '구역을 선택하면 다음 촬영부터 자동으로 태깅됩니다',
+                style: TextStyle(color: Colors.white60, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              VesselDiagram(
+                selectedZone: session.currentZone,
+                zoneCounts: session.defectsByZone,
+                onZoneTap: (zone) {
+                  ref.read(inspectionSessionProvider.notifier).setCurrentZone(zone);
+                  Navigator.pop(ctx);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = ref.watch(scanControllerProvider);
+    final session = ref.watch(inspectionSessionProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('B-Wave Scanner'),
         actions: [
+          ActionChip(
+            avatar: const Icon(Icons.location_on, size: 16, color: Colors.tealAccent),
+            label: Text(session.currentZone.displayName,
+                style: const TextStyle(fontSize: 12)),
+            onPressed: () => _openZonePicker(context),
+            backgroundColor: Colors.teal.withValues(alpha: 0.18),
+          ),
+          const SizedBox(width: 6),
           _ConnectionIndicator(isConnected: status.isConnected),
           IconButton(
             icon: const Icon(Icons.settings),
@@ -55,7 +113,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          _CameraPreviewPlaceholder(isScanning: status.state == ScanState.scanning),
+          _CameraView(status: status),
           AnimatedBuilder(
             animation: _pulseController,
             builder: (context, _) {
@@ -101,13 +159,18 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
   }
 }
 
-class _CameraPreviewPlaceholder extends StatelessWidget {
-  final bool isScanning;
+class _CameraView extends StatelessWidget {
+  final ScanStatus status;
 
-  const _CameraPreviewPlaceholder({required this.isScanning});
+  const _CameraView({required this.status});
 
   @override
   Widget build(BuildContext context) {
+    if (status.isCameraReady) {
+      return CameraPreview(status.cameraController!);
+    }
+
+    // Fallback while camera is initializing or unavailable
     return Container(
       color: Colors.black87,
       child: Center(
@@ -115,23 +178,20 @@ class _CameraPreviewPlaceholder extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              isScanning ? Icons.videocam : Icons.videocam_off,
+              status.state == ScanState.error ? Icons.videocam_off : Icons.videocam,
               size: 64,
-              color: isScanning ? Colors.green : Colors.grey,
+              color: status.state == ScanState.error ? Colors.red : Colors.grey,
             ),
             const SizedBox(height: 16),
             Text(
-              isScanning ? 'Scanning...' : 'Tap to Start Scan',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: Colors.white70,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Point camera at equipment to detect defects',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white38,
-                  ),
+              status.state == ScanState.error
+                  ? (status.errorMessage ?? 'Camera error')
+                  : 'Initializing camera...',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(color: Colors.white70),
+              textAlign: TextAlign.center,
             ),
           ],
         ),

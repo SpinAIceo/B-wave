@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { fetchDashboardOverview, fetchInspections } from '../api';
 import type { DashboardOverview, DefectType, Inspection } from '../types';
-import { DEFECT_COLORS, DEFECT_LABELS, STATUS_COLORS } from '../types';
+import { DEFECT_COLORS } from '../types';
+import { useT } from '../lib/i18n';
 
 export default function Dashboard() {
+  const t = useT();
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [inspections, setInspections] = useState<Inspection[]>([]);
 
@@ -13,38 +15,52 @@ export default function Dashboard() {
     fetchInspections().then(setInspections);
   }, []);
 
-  if (!overview) return <div>Loading...</div>;
+  const defectLabels: Record<DefectType, string> = {
+    rust: t('defectRust'),
+    damage: t('defectDamage'),
+    leak: t('defectLeak'),
+    missing_label: t('defectMissingLabel'),
+    cargo_lashing: t('defectCargoLashing'),
+  };
+  const statusLabels: Record<string, string> = {
+    sailing: t('statusSailing'),
+    port: t('statusPort'),
+    anchor: t('statusAnchor'),
+    maintenance: t('statusMaintenance'),
+  };
+
+  if (!overview) return <div>{t('loading')}</div>;
 
   return (
     <div>
       <div className="stats-grid">
-        <StatCard label="Total Vessels" value={overview.totalVessels} color="var(--primary)" trend="+2 this month" up />
-        <StatCard label="Active Inspections" value={overview.activeInspections} color="var(--accent)" trend="ongoing" />
-        <StatCard label="Critical Defects" value={overview.criticalDefects} color="var(--danger)" trend="-3 vs last week" up />
-        <StatCard label="Detention Risk" value={overview.detentionRiskScore} color="var(--warning)" trend="score / 100" />
+        <StatCard label={t('totalVessels')} value={overview.totalVessels} color="var(--primary)" trend={t('trendThisMonth')} up />
+        <StatCard label={t('activeInspections')} value={overview.activeInspections} color="var(--accent)" trend={t('trendOngoing')} />
+        <StatCard label={t('criticalDefects')} value={overview.criticalDefects} color="var(--danger)" trend={t('trendVsLastWeek')} up />
+        <StatCard label={t('detentionRisk')} value={overview.detentionRiskScore} color="var(--warning)" trend={t('trendScoreOf100')} />
       </div>
 
       <div className="charts-grid">
         <div className="card">
-          <div className="chart-title">Defect Distribution</div>
-          <DefectBarChart data={overview.defectDistribution} />
+          <div className="chart-title">{t('defectDistribution')}</div>
+          <DefectBarChart data={overview.defectDistribution} labels={defectLabels} />
         </div>
         <div className="card">
-          <div className="chart-title">Fleet Status</div>
-          <StatusDonut data={overview.vesselsByStatus} />
+          <div className="chart-title">{t('fleetStatus')}</div>
+          <StatusDonut data={overview.vesselsByStatus} labels={statusLabels} />
         </div>
       </div>
 
       <div className="card">
-        <div className="chart-title">Recent Inspections</div>
+        <div className="chart-title">{t('recentInspections')}</div>
         <table className="data-table">
           <thead>
             <tr>
-              <th>Vessel</th>
-              <th>Port</th>
-              <th>Date</th>
-              <th>Result</th>
-              <th>Critical</th>
+              <th>{t('vessel')}</th>
+              <th>{t('port')}</th>
+              <th>{t('date')}</th>
+              <th>{t('result')}</th>
+              <th>{t('critical')}</th>
             </tr>
           </thead>
           <tbody>
@@ -55,7 +71,7 @@ export default function Dashboard() {
                 <td>{ins.completedAt.slice(0, 10)}</td>
                 <td>
                   <span className={`badge ${ins.failed > 0 ? 'badge-danger' : 'badge-success'}`}>
-                    {ins.failed > 0 ? 'FAIL' : 'PASS'}
+                    {ins.failed > 0 ? t('fail') : t('pass')}
                   </span>
                 </td>
                 <td style={{ color: ins.criticalDefects > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
@@ -82,7 +98,7 @@ function StatCard({ label, value, color, trend, up }: {
   );
 }
 
-function DefectBarChart({ data }: { data: Record<DefectType, number> }) {
+function DefectBarChart({ data, labels }: { data: Record<DefectType, number>; labels: Record<DefectType, string> }) {
   const ref = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
@@ -122,7 +138,7 @@ function DefectBarChart({ data }: { data: Record<DefectType, number> }) {
       .attr('text-anchor', 'end')
       .attr('fill', '#90a4ae')
       .attr('font-size', 12)
-      .text(d => DEFECT_LABELS[d[0]]);
+      .text(d => labels[d[0]]);
 
     g.selectAll('.count')
       .data(entries)
@@ -134,18 +150,25 @@ function DefectBarChart({ data }: { data: Record<DefectType, number> }) {
       .attr('font-size', 12)
       .attr('font-weight', 600)
       .text(d => d[1]);
-  }, [data]);
+  }, [data, labels]);
 
   return <svg ref={ref} width={500} height={200} />;
 }
 
-function StatusDonut({ data }: { data: Record<string, number> }) {
+function StatusDonut({ data, labels }: { data: Record<string, number>; labels: Record<string, string> }) {
   const ref = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
     if (!ref.current) return;
     const svg = d3.select(ref.current);
     svg.selectAll('*').remove();
+
+    const STATUS_COLORS_MAP: Record<string, string> = {
+      sailing: '#4caf50',
+      port: '#2196f3',
+      anchor: '#ff9800',
+      maintenance: '#f44336',
+    };
 
     const size = 200, radius = size / 2 - 10;
     const entries = Object.entries(data) as [string, number][];
@@ -161,7 +184,7 @@ function StatusDonut({ data }: { data: Record<string, number> }) {
       .data(pieGen(entries))
       .join('path')
       .attr('d', arcGen)
-      .attr('fill', d => STATUS_COLORS[d.data[0] as keyof typeof STATUS_COLORS] ?? '#666');
+      .attr('fill', d => STATUS_COLORS_MAP[d.data[0]] ?? '#666');
 
     g.selectAll('text')
       .data(pieGen(entries))
@@ -171,8 +194,8 @@ function StatusDonut({ data }: { data: Record<string, number> }) {
       .attr('fill', 'white')
       .attr('font-size', 10)
       .attr('font-weight', 600)
-      .text(d => d.data[0]);
-  }, [data]);
+      .text(d => labels[d.data[0]] ?? d.data[0]);
+  }, [data, labels]);
 
   return <svg ref={ref} width={200} height={200} />;
 }

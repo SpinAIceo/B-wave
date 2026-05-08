@@ -34,6 +34,10 @@ def _conn() -> sqlite3.Connection:
     return conn
 
 
+VALID_ZONES = ("bow", "midship", "stern", "deck", "hull", "engine_room")
+DEFAULT_ZONE = "midship"
+
+
 def init_db() -> None:
     log.info(f"init DB at {DB_PATH}")
     with _conn() as conn:
@@ -46,7 +50,8 @@ def init_db() -> None:
                 inference_ms REAL,
                 model_version TEXT,
                 image_width  INTEGER,
-                image_height INTEGER
+                image_height INTEGER,
+                zone        TEXT NOT NULL DEFAULT 'midship'
             );
             CREATE TABLE IF NOT EXISTS detections (
                 id          TEXT PRIMARY KEY,
@@ -59,22 +64,33 @@ def init_db() -> None:
                 x_min REAL, y_min REAL, x_max REAL, y_max REAL
             );
             CREATE INDEX IF NOT EXISTS idx_scans_vessel ON scans(vessel_id);
+            CREATE INDEX IF NOT EXISTS idx_scans_zone ON scans(zone);
             CREATE INDEX IF NOT EXISTS idx_detections_scan ON detections(scan_id);
         """)
-    log.info("DB schema ready (indexes: vessel_id, scan_id)")
+        # Idempotent migration for existing DBs (sqlite ALTER TABLE limitation).
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(scans)").fetchall()]
+        if "zone" not in cols:
+            conn.execute(
+                "ALTER TABLE scans ADD COLUMN zone TEXT NOT NULL DEFAULT 'midship'"
+            )
+            log.info("migrated: scans.zone column added")
+    log.info("DB schema ready (indexes: vessel_id, zone, scan_id)")
 
 
-def save_scan(vessel_id: str, filename: str, result) -> str:
+def save_scan(vessel_id: str, filename: str, result, zone: str = DEFAULT_ZONE) -> str:
     scan_id = "S" + str(uuid.uuid4())[:7].upper()
     now = datetime.now(timezone.utc).isoformat()
-    log.info(f"save_scan scan={scan_id} vessel={vessel_id} file={filename} detections={len(result.detections)}")
+    if zone not in VALID_ZONES:
+        log.warning(f"save_scan invalid zone='{zone}', falling back to '{DEFAULT_ZONE}'")
+        zone = DEFAULT_ZONE
+    log.info(f"save_scan scan={scan_id} vessel={vessel_id} zone={zone} file={filename} detections={len(result.detections)}")
     try:
         with _conn() as conn:
             conn.execute(
-                "INSERT INTO scans VALUES (?,?,?,?,?,?,?,?)",
+                "INSERT INTO scans VALUES (?,?,?,?,?,?,?,?,?)",
                 (scan_id, vessel_id, now, filename,
                  result.inference_ms, result.model_version,
-                 result.image_width, result.image_height),
+                 result.image_width, result.image_height, zone),
             )
             for det in result.detections:
                 conn.execute(

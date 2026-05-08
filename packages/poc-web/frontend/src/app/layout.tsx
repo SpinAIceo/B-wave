@@ -1,22 +1,30 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import "./globals.css";
 import NavBar from "@/components/NavBar";
+import Footer from "@/components/Footer";
+import { LocaleProvider } from "@/lib/LocaleProvider";
+import { DEFAULT_LOCALE, LOCALES, STORAGE_KEY, type Locale } from "@/lib/i18n";
 
 export const metadata: Metadata = {
   title: "B-Wave | Ship PSC Defect Scanner",
   description: "AI-powered Port State Control defect detection for maritime vessels",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies();
+  const stored = cookieStore.get(STORAGE_KEY)?.value;
+  const initialLocale: Locale =
+    stored && stored in LOCALES ? (stored as Locale) : DEFAULT_LOCALE;
+
   return (
-    <html lang="en">
+    <html lang={initialLocale}>
       <body>
-        <NavBar />
-        <main className="min-h-screen pt-16">{children}</main>
-        <footer className="border-t border-navy-700 py-8 text-center text-sm text-gray-500">
-          <p>© 2026 Spinai — B-Wave Edge Vision AI · PSC Compliance Scanner</p>
-          <p className="mt-1 text-xs">Model: YOLO26s-v1 · mAP50-95=0.323 · Latency p95=9.3ms (RTX4090)</p>
-        </footer>
+        <LocaleProvider initialLocale={initialLocale}>
+          <NavBar />
+          <main className="min-h-screen pt-16">{children}</main>
+          <Footer />
+        </LocaleProvider>
       </body>
     </html>
   );

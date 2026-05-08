@@ -51,6 +51,19 @@ class Severity(StrEnum):
     CRITICAL = "CRITICAL"
 
 
+class Zone(StrEnum):
+    """Vessel inspection zones — used for zone-based photo/defect mapping."""
+    BOW = "bow"
+    MIDSHIP = "midship"
+    STERN = "stern"
+    DECK = "deck"
+    HULL = "hull"
+    ENGINE_ROOM = "engine_room"
+
+
+DEFAULT_ZONE = Zone.MIDSHIP
+
+
 class DetentionRecord(BaseModel):
     date: str
     port: str
@@ -103,6 +116,7 @@ class DetectionRecord(BaseModel):
     psc_code: str
     severity: Severity
     bbox: BBox
+    zone: Zone = DEFAULT_ZONE
     model_version: str = "0.1.0"
     timestamp: datetime = Field(default_factory=datetime.now)
 

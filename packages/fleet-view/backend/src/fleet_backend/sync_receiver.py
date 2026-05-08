@@ -5,6 +5,7 @@ from datetime import datetime
 
 from .models import (
     BBox,
+    DEFAULT_ZONE,
     DetectionRecord,
     Inspection,
     MoURegion,
@@ -12,6 +13,7 @@ from .models import (
     SyncEvent,
     SyncReceiveRequest,
     SyncStatus,
+    Zone,
 )
 from .store import DataStore
 
@@ -25,7 +27,7 @@ class SyncReceiver:
     def validate_sync_data(self, data: SyncReceiveRequest) -> bool:
         return bool(data.vessel_id and data.edge_server_id)
 
-    def receive_inspection(self, data: SyncReceiveRequest) -> SyncEvent:
+    async def receive_inspection(self, data: SyncReceiveRequest) -> SyncEvent:
         if not self.validate_sync_data(data):
             return SyncEvent(
                 id=f"SYNC-{uuid.uuid4().hex[:8]}",
@@ -38,10 +40,10 @@ class SyncReceiver:
         records_received = 0
 
         if data.inspection_id:
-            existing = self.store.get_inspection(data.inspection_id)
+            existing = await self.store.get_inspection(data.inspection_id)
             if existing:
-                resolved = self.resolve_conflicts(existing, data)
-                self.store.inspections[resolved.id] = resolved
+                resolved = self._resolve_conflicts(existing, data)
+                await self.store.add_inspection(resolved)
             else:
                 inspection = Inspection(
                     id=data.inspection_id,
@@ -53,10 +55,14 @@ class SyncReceiver:
                     synced=True,
                     synced_at=datetime.now(),
                 )
-                self.store.add_inspection(inspection)
+                await self.store.add_inspection(inspection)
             records_received += 1
 
         for det_data in data.detections:
+            try:
+                zone = Zone(det_data["zone"]) if "zone" in det_data else DEFAULT_ZONE
+            except ValueError:
+                zone = DEFAULT_ZONE
             det = DetectionRecord(
                 id=det_data.get("id", f"DET-{uuid.uuid4().hex[:8]}"),
                 inspection_id=data.inspection_id or "unknown",
@@ -67,9 +73,10 @@ class SyncReceiver:
                 bbox=BBox(**det_data["bbox"]) if "bbox" in det_data else BBox(
                     x_min=0, y_min=0, x_max=0, y_max=0
                 ),
+                zone=zone,
                 model_version=det_data.get("model_version", "0.1.0"),
             )
-            self.store.add_detection(det)
+            await self.store.add_detection(det)
             records_received += 1
 
         sync_event = SyncEvent(
@@ -79,10 +86,10 @@ class SyncReceiver:
             records_received=records_received,
             status=SyncStatus.SUCCESS,
         )
-        self.store.add_sync_event(sync_event)
+        await self.store.add_sync_event(sync_event)
         return sync_event
 
-    def resolve_conflicts(self, existing: Inspection, incoming: SyncReceiveRequest) -> Inspection:
+    def _resolve_conflicts(self, existing: Inspection, incoming: SyncReceiveRequest) -> Inspection:
         incoming_ts = incoming.timestamp or datetime.now().isoformat()
         existing_ts = existing.synced_at.isoformat() if existing.synced_at else "1970-01-01"
 
@@ -93,5 +100,5 @@ class SyncReceiver:
                 existing.port_of_inspection = incoming.port_of_inspection
         return existing
 
-    def get_sync_history(self, vessel_id: str) -> list[SyncEvent]:
-        return self.store.get_sync_history(vessel_id)
+    async def get_sync_history(self, vessel_id: str) -> list[SyncEvent]:
+        return await self.store.get_sync_history(vessel_id)

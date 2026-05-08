@@ -1,87 +1,148 @@
-import { useEffect, useState } from 'react';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import { useEffect, useRef, useState } from 'react';
 import { fetchVessels } from '../api';
+import { useT } from '../lib/i18n';
 import type { Vessel } from '../types';
 
-export default function FleetMap() {
-  const [vessels, setVessels] = useState<Vessel[]>([]);
-  const [tooltip, setTooltip] = useState<{ vessel: Vessel; x: number; y: number } | null>(null);
+// Set via VITE_MAPBOX_TOKEN env var; falls back to placeholder so the map
+// initialises without crashing (tiles will be watermarked / blocked by Mapbox).
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN ?? '';
+mapboxgl.accessToken = MAPBOX_TOKEN;
 
+const STATUS_COLOR: Record<string, string> = {
+  SAILING: '#4caf50',
+  PORT: '#2196f3',
+  ANCHOR: '#ff9800',
+};
+
+function vesselColor(v: Vessel): string {
+  if (v.criticalDefects > 0) return '#f44336';
+  if (v.detentionRisk > 30) return '#ff9800';
+  return STATUS_COLOR[v.status?.toUpperCase()] ?? '#4caf50';
+}
+
+export default function FleetMap() {
+  const t = useT();
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const map = useRef<mapboxgl.Map | null>(null);
+  const markers = useRef<mapboxgl.Marker[]>([]);
+  const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [noToken] = useState(!MAPBOX_TOKEN);
+
+  // Load vessels
   useEffect(() => { fetchVessels().then(setVessels); }, []);
 
-  const toX = (lng: number) => ((lng + 180) / 360) * 900;
-  const toY = (lat: number) => ((90 - lat) / 180) * 450;
+  // Init map
+  useEffect(() => {
+    if (!mapContainer.current || map.current) return;
+    map.current = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: 'mapbox://styles/mapbox/dark-v11',
+      center: [100, 20],
+      zoom: 2,
+      projection: 'mercator',
+    });
+    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    return () => {
+      map.current?.remove();
+      map.current = null;
+    };
+  }, []);
 
-  const statusColor = (v: Vessel) => {
-    if (v.criticalDefects > 0) return '#f44336';
-    if (v.detentionRisk > 30) return '#ff9800';
-    return '#4caf50';
-  };
+  // Place vessel markers whenever vessels or map change
+  useEffect(() => {
+    if (!map.current) return;
+    // Remove old markers
+    markers.current.forEach(m => m.remove());
+    markers.current = [];
 
-  return (
-    <div className="fleet-map-container">
-      <svg width="100%" height="100%" viewBox="0 0 900 450" style={{ background: '#0d1f3c' }}>
-        {/* Simplified continent outlines */}
-        <rect x={0} y={0} width={900} height={450} fill="#0d1f3c" />
-        {/* Grid lines */}
-        {[0, 90, 180, 270, 360, 450, 540, 630, 720, 810, 900].map(x => (
-          <line key={`vl${x}`} x1={x} y1={0} x2={x} y2={450} stroke="#1a2d4a" strokeWidth={0.5} />
-        ))}
-        {[0, 75, 150, 225, 300, 375, 450].map(y => (
-          <line key={`hl${y}`} x1={0} y1={y} x2={900} y2={y} stroke="#1a2d4a" strokeWidth={0.5} />
-        ))}
-        {/* Simplified land masses */}
-        <ellipse cx={250} cy={140} rx={90} ry={50} fill="#162744" opacity={0.6} /> {/* Europe */}
-        <ellipse cx={250} cy={260} rx={60} ry={80} fill="#162744" opacity={0.6} /> {/* Africa */}
-        <ellipse cx={500} cy={170} rx={150} ry={80} fill="#162744" opacity={0.6} /> {/* Asia */}
-        <ellipse cx={700} cy={350} rx={50} ry={30} fill="#162744" opacity={0.6} /> {/* Australia */}
-        <ellipse cx={130} cy={180} rx={60} ry={100} fill="#162744" opacity={0.6} /> {/* Americas */}
+    vessels.forEach(v => {
+      const el = document.createElement('div');
+      el.style.cssText = `
+        width: 16px; height: 16px; border-radius: 50%;
+        background: ${vesselColor(v)};
+        border: 2px solid rgba(255,255,255,0.6);
+        cursor: pointer;
+        box-shadow: 0 0 8px ${vesselColor(v)}88;
+      `;
 
-        {/* Vessel markers */}
-        {vessels.map(v => {
-          const cx = toX(v.lng);
-          const cy = toY(v.lat);
-          return (
-            <g key={v.id}
-              onMouseEnter={(e) => setTooltip({ vessel: v, x: e.clientX, y: e.clientY })}
-              onMouseLeave={() => setTooltip(null)}
-              style={{ cursor: 'pointer' }}
-            >
-              <circle cx={cx} cy={cy} r={12} fill={statusColor(v)} opacity={0.3} />
-              <circle cx={cx} cy={cy} r={6} fill={statusColor(v)} />
-              <text x={cx} y={cy - 16} textAnchor="middle" fill="#90a4ae" fontSize={9}>{v.name}</text>
-            </g>
-          );
-        })}
-      </svg>
-
-      {/* Tooltip */}
-      {tooltip && (
-        <div style={{
-          position: 'fixed', left: tooltip.x + 12, top: tooltip.y + 12,
-          background: '#111d33', border: '1px solid #1e3a5f', borderRadius: 6,
-          padding: '10px 14px', fontSize: 13, zIndex: 100, pointerEvents: 'none',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-        }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>{tooltip.vessel.name}</div>
-          <div style={{ color: '#90a4ae' }}>
-            {tooltip.vessel.type} · {tooltip.vessel.flag}<br />
-            Status: <span style={{ color: statusColor(tooltip.vessel), fontWeight: 600 }}>{tooltip.vessel.status}</span><br />
-            Last Inspection: {tooltip.vessel.lastInspection}<br />
-            Critical Defects: <span style={{ color: tooltip.vessel.criticalDefects > 0 ? '#f44336' : '#4caf50' }}>
-              {tooltip.vessel.criticalDefects}
+      const popup = new mapboxgl.Popup({ offset: 12, closeButton: false })
+        .setHTML(`
+          <div style="font-family:monospace;font-size:12px;min-width:160px;">
+            <strong>${v.name}</strong><br/>
+            ${v.type} · ${v.flag}<br/>
+            ${t('status')}: <span style="color:${vesselColor(v)};font-weight:700">
+              ${v.status?.toUpperCase() ?? '-'}
+            </span><br/>
+            ${t('lastInspection')}: ${v.lastInspection ?? '-'}<br/>
+            ${t('criticalDefectsLabel')}:
+            <span style="color:${v.criticalDefects > 0 ? '#f44336' : '#4caf50'}">
+              ${v.criticalDefects}
             </span>
           </div>
-        </div>
-      )}
+        `);
 
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([v.lng, v.lat])
+        .setPopup(popup)
+        .addTo(map.current!);
+
+      markers.current.push(marker);
+    });
+  }, [vessels, t]);
+
+  if (noToken) {
+    return (
+      <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+        <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(10,20,40,0.85)', color: '#90a4ae', gap: 12,
+        }}>
+          <span style={{ fontSize: 40 }}>🗺️</span>
+          <p style={{ margin: 0, fontSize: 14 }}>
+            Mapbox token not set. Add{' '}
+            <code style={{ background: '#1e3a5f', padding: '2px 6px', borderRadius: 4 }}>
+              VITE_MAPBOX_TOKEN
+            </code>{' '}
+            to <code>.env</code> to enable the live map.
+          </p>
+          <p style={{ margin: 0, fontSize: 12, color: '#546e7a' }}>
+            Vessels are still loaded — token required only for tile rendering.
+          </p>
+          <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+            {vessels.map(v => (
+              <div key={v.id} style={{
+                background: '#111d33', border: `1px solid ${vesselColor(v)}`,
+                borderRadius: 6, padding: '6px 12px', fontSize: 12,
+              }}>
+                <span style={{ color: vesselColor(v), fontWeight: 700 }}>●</span>{' '}
+                {v.name} ({v.flag})
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />
       {/* Legend */}
       <div style={{
-        position: 'absolute', bottom: 20, right: 20,
-        background: 'rgba(17,29,51,0.9)', border: '1px solid #1e3a5f',
-        borderRadius: 6, padding: 12, fontSize: 12,
+        position: 'absolute', bottom: 30, right: 10,
+        background: 'rgba(17,29,51,0.92)', border: '1px solid #1e3a5f',
+        borderRadius: 6, padding: '10px 14px', fontSize: 12, zIndex: 1,
       }}>
-        <div style={{ fontWeight: 600, marginBottom: 6, color: '#90a4ae' }}>Status</div>
-        {([['#4caf50', 'No Issues'], ['#ff9800', 'Warnings'], ['#f44336', 'Critical']] as const).map(([color, label]) => (
+        <div style={{ fontWeight: 600, marginBottom: 6, color: '#90a4ae' }}>{t('status')}</div>
+        {[
+          ['#4caf50', t('legendNoIssues')],
+          ['#ff9800', t('legendWarnings')],
+          ['#f44336', t('legendCritical')],
+        ].map(([color, label]) => (
           <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <span style={{ width: 10, height: 10, borderRadius: '50%', background: color, display: 'inline-block' }} />
             {label}
