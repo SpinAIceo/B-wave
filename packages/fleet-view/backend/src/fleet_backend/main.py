@@ -85,6 +85,16 @@ async def get_vessel(
     return vessel.model_dump()
 
 
+@app.get("/api/v1/inspections")
+async def list_all_inspections(
+    db: AsyncSession = Depends(get_db),
+    _: None = RequireViewer,
+):
+    """Return every inspection across all vessels, newest first."""
+    store = DataStore(db)
+    return [i.model_dump() for i in await store.get_all_inspections()]
+
+
 @app.get("/api/v1/vessels/{vessel_id}/inspections")
 async def get_vessel_inspections(
     vessel_id: str,

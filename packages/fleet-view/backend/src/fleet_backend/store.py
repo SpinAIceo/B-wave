@@ -89,6 +89,12 @@ class DataStore:
         )).scalars().all()
         return [_to_inspection(r) for r in rows]
 
+    async def get_all_inspections(self) -> list[Inspection]:
+        rows = (await self.session.execute(
+            select(InspectionRow).order_by(InspectionRow.started_at.desc())
+        )).scalars().all()
+        return [_to_inspection(r) for r in rows]
+
     async def get_inspection(self, inspection_id: str) -> Inspection | None:
         row = await self.session.get(InspectionRow, inspection_id)
         return _to_inspection(row) if row else None

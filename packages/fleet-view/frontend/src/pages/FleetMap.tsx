@@ -17,9 +17,9 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 function vesselColor(v: Vessel): string {
-  if (v.criticalDefects > 0) return '#f44336';
-  if (v.detentionRisk > 30) return '#ff9800';
-  return STATUS_COLOR[v.status?.toUpperCase()] ?? '#4caf50';
+  if ((v.criticalDefects ?? 0) > 0) return '#f44336';
+  if ((v.detentionRisk ?? 0) > 30) return '#ff9800';
+  return STATUS_COLOR[(v.status as string)?.toUpperCase()] ?? '#4caf50';
 }
 
 export default function FleetMap() {
@@ -58,6 +58,7 @@ export default function FleetMap() {
     markers.current = [];
 
     vessels.forEach(v => {
+      if (v.lat == null || v.lng == null) return;  // skip vessels without coords
       const el = document.createElement('div');
       el.style.cssText = `
         width: 16px; height: 16px; border-radius: 50%;
@@ -77,14 +78,14 @@ export default function FleetMap() {
             </span><br/>
             ${t('lastInspection')}: ${v.lastInspection ?? '-'}<br/>
             ${t('criticalDefectsLabel')}:
-            <span style="color:${v.criticalDefects > 0 ? '#f44336' : '#4caf50'}">
-              ${v.criticalDefects}
+            <span style="color:${(v.criticalDefects ?? 0) > 0 ? '#f44336' : '#4caf50'}">
+              ${v.criticalDefects ?? 0}
             </span>
           </div>
         `);
 
       const marker = new mapboxgl.Marker(el)
-        .setLngLat([v.lng, v.lat])
+        .setLngLat([v.lng!, v.lat!])
         .setPopup(popup)
         .addTo(map.current!);
 

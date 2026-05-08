@@ -44,8 +44,10 @@ export default function VesselDetail({ vessel, onBack }: Props) {
     alert(`${t('reportGenerated')}: ${result.reportId}`);
   };
 
-  const statusColor = vessel.criticalDefects > 0 ? 'var(--danger)' :
-    vessel.detentionRisk > 30 ? 'var(--warning)' : 'var(--success)';
+  const critCnt = vessel.criticalDefects ?? 0;
+  const detRisk = vessel.detentionRisk ?? 0;
+  const statusColor = critCnt > 0 ? 'var(--danger)' :
+    detRisk > 30 ? 'var(--warning)' : 'var(--success)';
 
   return (
     <div>
@@ -67,7 +69,7 @@ export default function VesselDetail({ vessel, onBack }: Props) {
               {(STATUS_LABELS[vessel.status] ?? vessel.status).toUpperCase()}
             </span>
             <div style={{ marginTop: 8, fontSize: 13, color: 'var(--text-muted)' }}>
-              {t('detentionRiskLabel')}: <span style={{ color: statusColor, fontWeight: 700 }}>{vessel.detentionRisk}%</span>
+              {t('detentionRiskLabel')}: <span style={{ color: statusColor, fontWeight: 700 }}>{detRisk}%</span>
             </div>
           </div>
         </div>
@@ -118,9 +120,9 @@ export default function VesselDetail({ vessel, onBack }: Props) {
           <div className="timeline">
             {inspections.map(ins => (
               <div key={ins.id} className={`timeline-item ${ins.criticalDefects > 0 ? 'critical' : ''}`}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{ins.port}</div>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{ins.portOfInspection}</div>
                 <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                  {ins.completedAt.slice(0, 10)} · {ins.mouRegion} {t('mouSuffix')}
+                  {(ins.completedAt ?? ins.startedAt).slice(0, 10)} · {ins.mouRegion} {t('mouSuffix')}
                 </div>
                 <div style={{ fontSize: 13, marginTop: 4 }}>
                   <span style={{ color: 'var(--success)' }}>{ins.passed} {t('passLabel')}</span>
@@ -161,10 +163,13 @@ export default function VesselDetail({ vessel, onBack }: Props) {
             <table style={{ fontSize: 13 }}>
               <tbody>
                 {[
-                  [t('infoPosition'), `${vessel.lat.toFixed(2)}°N, ${vessel.lng.toFixed(2)}°E`],
-                  [t('infoLastInspection'), vessel.lastInspection],
-                  [t('infoCriticalDefects'), `${vessel.criticalDefects}`],
-                  [t('infoDetentionRisk'), `${vessel.detentionRisk}%`],
+                  [t('infoPosition'),
+                    vessel.lat != null && vessel.lng != null
+                      ? `${vessel.lat.toFixed(2)}°N, ${vessel.lng.toFixed(2)}°E`
+                      : '-'],
+                  [t('infoLastInspection'), vessel.lastInspection ?? '-'],
+                  [t('infoCriticalDefects'), `${vessel.criticalDefects ?? 0}`],
+                  [t('infoDetentionRisk'), `${vessel.detentionRisk ?? 0}%`],
                 ].map(([label, value]) => (
                   <tr key={label}>
                     <td style={{ color: 'var(--text-muted)', padding: '4px 16px 4px 0' }}>{label}</td>

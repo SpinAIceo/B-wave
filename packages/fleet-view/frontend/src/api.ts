@@ -13,11 +13,75 @@ const USE_MOCKS = !import.meta.env.VITE_API_URL || import.meta.env.VITE_USE_MOCK
 
 logger.info('api', `mode=${USE_MOCKS ? 'MOCK' : 'LIVE'} base=${API_BASE}`);
 
+// ── Live response normalizers ───────────────────────────────────────────────
+//
+// The FastAPI backend uses Pydantic snake_case JSON. After snake→camel transform,
+// some field names still differ from what the frontend UI expects (e.g. backend's
+// `latitude` vs UI's `lat`). These normalizers reconcile those gaps so consumer
+// components don't need to know which mode (mock vs live) the data came from.
+
+function normalizeVesselFromApi(raw: Record<string, unknown>): Vessel {
+  const v = raw as unknown as Vessel & { latitude?: number; longitude?: number; lastPscInspection?: string };
+  const status = typeof v.status === 'string' ? v.status.toLowerCase() : v.status;
+  return {
+    ...v,
+    lat: v.lat ?? v.latitude,
+    lng: v.lng ?? v.longitude,
+    lastInspection: v.lastInspection ?? v.lastPscInspection,
+    status: status as Vessel['status'],
+    criticalDefects: v.criticalDefects ?? 0,
+    detentionRisk: v.detentionRisk ?? 0,
+  };
+}
+
+function normalizeInspectionFromApi(raw: Record<string, unknown>): Inspection {
+  const i = raw as unknown as Inspection & { port?: string };
+  return {
+    ...i,
+    portOfInspection: i.portOfInspection ?? i.port ?? '',
+  };
+}
+
+function normalizeDashboardFromApi(raw: Record<string, unknown>): DashboardOverview {
+  const o = raw as unknown as DashboardOverview & { defectTypeDistribution?: Record<string, number> };
+  const statusMap = o.vesselsByStatus ?? ({} as Record<string, number>);
+  // Backend returns UPPERCASE status keys ("PORT","SAILING"); UI keys are lowercase
+  const lowerStatus: Record<string, number> = {};
+  for (const [k, v] of Object.entries(statusMap)) lowerStatus[k.toLowerCase()] = v as number;
+
+  return {
+    ...o,
+    vesselsByStatus: lowerStatus as DashboardOverview['vesselsByStatus'],
+    // Backend field is `defect_type_distribution`; UI expects `defectDistribution`
+    defectDistribution: (o.defectDistribution
+      ?? o.defectTypeDistribution
+      ?? {}) as DashboardOverview['defectDistribution'],
+  };
+}
+
+/**
+ * Convert snake_case keys (Python/FastAPI convention) to camelCase
+ * (JavaScript convention) recursively.
+ */
+function snakeToCamel<T = unknown>(input: unknown): T {
+  if (Array.isArray(input)) return input.map(snakeToCamel) as unknown as T;
+  if (input !== null && typeof input === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+      const camelKey = k.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
+      out[camelKey] = snakeToCamel(v);
+    }
+    return out as T;
+  }
+  return input as T;
+}
+
 /**
  * Auth-aware fetch wrapper:
  *   - Attaches `Authorization: Bearer <token>` if stored
  *   - On 401 → triggers global force-logout (set up in AuthProvider)
  *   - Throws on non-2xx, returns parsed JSON on success
+ *   - Auto-converts snake_case JSON keys → camelCase
  */
 async function authFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getStoredToken();
@@ -34,7 +98,8 @@ async function authFetch<T>(path: string, init?: RequestInit): Promise<T> {
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}`);
   }
-  return resp.json() as Promise<T>;
+  const raw = await resp.json();
+  return snakeToCamel<T>(raw);
 }
 
 async function fetchOrMock<T>(label: string, fetcher: () => Promise<T>, mockData: T): Promise<T> {
@@ -87,12 +152,12 @@ const MOCK_VESSELS: Vessel[] = [
 ];
 
 const MOCK_INSPECTIONS: Inspection[] = [
-  { id: 'I001', vesselId: 'V001', vesselName: 'MV Pacific Star', port: 'Busan', mouRegion: 'Tokyo', startedAt: '2026-04-25T08:00', completedAt: '2026-04-25T10:30', totalItems: 15, passed: 12, failed: 3, criticalDefects: 1 },
-  { id: 'I002', vesselId: 'V002', vesselName: 'MV Ocean Harmony', port: 'Singapore', mouRegion: 'Tokyo', startedAt: '2026-04-20T09:00', completedAt: '2026-04-20T11:00', totalItems: 15, passed: 15, failed: 0, criticalDefects: 0 },
-  { id: 'I003', vesselId: 'V003', vesselName: 'MV Blue Horizon', port: 'Rotterdam', mouRegion: 'Paris', startedAt: '2026-04-15T07:00', completedAt: '2026-04-15T10:00', totalItems: 15, passed: 10, failed: 5, criticalDefects: 3 },
-  { id: 'I004', vesselId: 'V004', vesselName: 'MV Northern Wind', port: 'Shanghai', mouRegion: 'Tokyo', startedAt: '2026-04-22T06:30', completedAt: '2026-04-22T08:00', totalItems: 15, passed: 14, failed: 1, criticalDefects: 0 },
-  { id: 'I005', vesselId: 'V005', vesselName: 'MV Coral Venture', port: 'Hong Kong', mouRegion: 'Tokyo', startedAt: '2026-04-10T08:00', completedAt: '2026-04-10T11:30', totalItems: 15, passed: 11, failed: 4, criticalDefects: 2 },
-  { id: 'I006', vesselId: 'V001', vesselName: 'MV Pacific Star', port: 'Yokohama', mouRegion: 'Tokyo', startedAt: '2026-04-18T09:00', completedAt: '2026-04-18T11:00', totalItems: 15, passed: 13, failed: 2, criticalDefects: 0 },
+  { id: 'I001', vesselId: 'V001', vesselName: 'MV Pacific Star', portOfInspection: 'Busan', mouRegion: 'Tokyo', startedAt: '2026-04-25T08:00', completedAt: '2026-04-25T10:30', totalItems: 15, passed: 12, failed: 3, criticalDefects: 1 },
+  { id: 'I002', vesselId: 'V002', vesselName: 'MV Ocean Harmony', portOfInspection: 'Singapore', mouRegion: 'Tokyo', startedAt: '2026-04-20T09:00', completedAt: '2026-04-20T11:00', totalItems: 15, passed: 15, failed: 0, criticalDefects: 0 },
+  { id: 'I003', vesselId: 'V003', vesselName: 'MV Blue Horizon', portOfInspection: 'Rotterdam', mouRegion: 'Paris', startedAt: '2026-04-15T07:00', completedAt: '2026-04-15T10:00', totalItems: 15, passed: 10, failed: 5, criticalDefects: 3 },
+  { id: 'I004', vesselId: 'V004', vesselName: 'MV Northern Wind', portOfInspection: 'Shanghai', mouRegion: 'Tokyo', startedAt: '2026-04-22T06:30', completedAt: '2026-04-22T08:00', totalItems: 15, passed: 14, failed: 1, criticalDefects: 0 },
+  { id: 'I005', vesselId: 'V005', vesselName: 'MV Coral Venture', portOfInspection: 'Hong Kong', mouRegion: 'Tokyo', startedAt: '2026-04-10T08:00', completedAt: '2026-04-10T11:30', totalItems: 15, passed: 11, failed: 4, criticalDefects: 2 },
+  { id: 'I006', vesselId: 'V001', vesselName: 'MV Pacific Star', portOfInspection: 'Yokohama', mouRegion: 'Tokyo', startedAt: '2026-04-18T09:00', completedAt: '2026-04-18T11:00', totalItems: 15, passed: 13, failed: 2, criticalDefects: 0 },
 ];
 
 // inspection_id가 MOCK_INSPECTIONS의 id와 매핑됨 — vessel별 zone 분포 테스트용
@@ -128,7 +193,10 @@ const MOCK_OVERVIEW: DashboardOverview = {
 export function fetchVessels(): Promise<Vessel[]> {
   return fetchOrMock(
     'GET /api/v1/vessels',
-    () => authFetch<Vessel[]>('/vessels'),
+    async () => {
+      const raw = await authFetch<Record<string, unknown>[]>('/vessels');
+      return raw.map(normalizeVesselFromApi);
+    },
     MOCK_VESSELS,
   );
 }
@@ -136,7 +204,10 @@ export function fetchVessels(): Promise<Vessel[]> {
 export function fetchVessel(id: string): Promise<Vessel | undefined> {
   return fetchOrMock(
     `GET /api/v1/vessels/${id}`,
-    () => authFetch<Vessel>(`/vessels/${id}`),
+    async () => {
+      const raw = await authFetch<Record<string, unknown>>(`/vessels/${id}`);
+      return normalizeVesselFromApi(raw);
+    },
     MOCK_VESSELS.find(v => v.id === id),
   );
 }
@@ -144,7 +215,10 @@ export function fetchVessel(id: string): Promise<Vessel | undefined> {
 export function fetchDashboardOverview(): Promise<DashboardOverview> {
   return fetchOrMock(
     'GET /api/v1/dashboard/overview',
-    () => authFetch<DashboardOverview>('/dashboard/overview'),
+    async () => {
+      const raw = await authFetch<Record<string, unknown>>('/dashboard/overview');
+      return normalizeDashboardFromApi(raw);
+    },
     MOCK_OVERVIEW,
   );
 }
@@ -153,9 +227,13 @@ export function fetchInspections(vesselId?: string): Promise<Inspection[]> {
   const filtered = vesselId
     ? MOCK_INSPECTIONS.filter(i => i.vesselId === vesselId)
     : MOCK_INSPECTIONS;
+  const path = vesselId ? `/vessels/${vesselId}/inspections` : '/inspections';
   return fetchOrMock(
-    `GET /api/v1/vessels/${vesselId ?? 'all'}/inspections`,
-    () => authFetch<Inspection[]>(`/vessels/${vesselId ?? 'all'}/inspections`),
+    `GET /api/v1${path}`,
+    async () => {
+      const raw = await authFetch<Record<string, unknown>[]>(path);
+      return raw.map(normalizeInspectionFromApi);
+    },
     filtered,
   );
 }

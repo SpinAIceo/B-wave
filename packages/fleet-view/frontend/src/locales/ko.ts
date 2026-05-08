@@ -161,6 +161,7 @@ const ko = {
   loginInvalidCredentials: '사용자명 또는 비밀번호가 올바르지 않습니다',
   loginGenericError: '로그인 실패',
   loginRolesHint: '권한별 데모 계정: admin · operator · viewer',
+  loginDemoAccounts: '데모 계정 (클릭 시 자동 입력)',
   logout: '로그아웃',
 } as const;
 

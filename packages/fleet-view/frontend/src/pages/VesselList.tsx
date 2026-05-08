@@ -85,11 +85,11 @@ export default function VesselList() {
                 <td>{v.type}</td>
                 <td>{v.flag}</td>
                 <td>{statusBadge(v.status)}</td>
-                <td>{v.lastInspection}</td>
-                <td style={{ color: v.criticalDefects > 0 ? 'var(--danger)' : 'var(--text-muted)', fontWeight: 600 }}>
-                  {v.criticalDefects}
+                <td>{v.lastInspection ?? '-'}</td>
+                <td style={{ color: (v.criticalDefects ?? 0) > 0 ? 'var(--danger)' : 'var(--text-muted)', fontWeight: 600 }}>
+                  {v.criticalDefects ?? 0}
                 </td>
-                <td>{riskBadge(v.detentionRisk)}</td>
+                <td>{riskBadge(v.detentionRisk ?? 0)}</td>
               </tr>
             ))}
           </tbody>

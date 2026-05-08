@@ -163,6 +163,7 @@ const id = {
   loginInvalidCredentials: 'Nama pengguna atau kata sandi tidak valid',
   loginGenericError: 'Gagal masuk',
   loginRolesHint: 'Akun demo per peran: admin · operator · viewer',
+  loginDemoAccounts: 'Akun demo (klik untuk isi otomatis)',
   logout: 'Keluar',
 } as const satisfies Record<keyof typeof ko, string>;
 

@@ -163,6 +163,7 @@ const tl = {
   loginInvalidCredentials: 'Mali ang username o password',
   loginGenericError: 'Nabigo ang pag-login',
   loginRolesHint: 'Demo accounts ayon sa role: admin · operator · viewer',
+  loginDemoAccounts: 'Demo accounts (i-click para mag-auto-fill)',
   logout: 'Mag-Logout',
 } as const satisfies Record<keyof typeof ko, string>;
 

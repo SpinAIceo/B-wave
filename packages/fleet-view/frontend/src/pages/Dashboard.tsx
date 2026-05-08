@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { fetchDashboardOverview, fetchInspections } from '../api';
-import type { DashboardOverview, DefectType, Inspection } from '../types';
+import { fetchDashboardOverview, fetchInspections, fetchVessels } from '../api';
+import type { DashboardOverview, DefectType, Inspection, Vessel } from '../types';
 import { DEFECT_COLORS } from '../types';
 import { useT } from '../lib/i18n';
 
@@ -9,11 +9,18 @@ export default function Dashboard() {
   const t = useT();
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [inspections, setInspections] = useState<Inspection[]>([]);
+  const [vessels, setVessels] = useState<Vessel[]>([]);
 
   useEffect(() => {
     fetchDashboardOverview().then(setOverview);
     fetchInspections().then(setInspections);
+    fetchVessels().then(setVessels);
   }, []);
+
+  const vesselNameById = useMemo(
+    () => Object.fromEntries(vessels.map(v => [v.id, v.name])),
+    [vessels],
+  );
 
   const defectLabels: Record<DefectType, string> = {
     rust: t('defectRust'),
@@ -66,9 +73,9 @@ export default function Dashboard() {
           <tbody>
             {inspections.slice(0, 10).map(ins => (
               <tr key={ins.id}>
-                <td>{ins.vesselName}</td>
-                <td>{ins.port}</td>
-                <td>{ins.completedAt.slice(0, 10)}</td>
+                <td>{ins.vesselName ?? vesselNameById[ins.vesselId] ?? ins.vesselId}</td>
+                <td>{ins.portOfInspection}</td>
+                <td>{(ins.completedAt ?? ins.startedAt).slice(0, 10)}</td>
                 <td>
                   <span className={`badge ${ins.failed > 0 ? 'badge-danger' : 'badge-success'}`}>
                     {ins.failed > 0 ? t('fail') : t('pass')}

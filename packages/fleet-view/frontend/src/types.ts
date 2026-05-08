@@ -13,26 +13,42 @@ export interface Vessel {
   type: string;
   flag: string;
   managementCompany: string;
-  lat: number;
-  lng: number;
-  status: VesselStatus;
-  lastInspection: string;
-  criticalDefects: number;
-  detentionRisk: number;
+  /** Backend exposes `latitude` (snake → camel). `lat` kept for legacy mock compat. */
+  latitude?: number;
+  longitude?: number;
+  /** Legacy mock fields — populated when displaying mock data. */
+  lat?: number;
+  lng?: number;
+  status: VesselStatus | string;  // backend returns "PORT"/"SAILING" uppercase enum
+  /** Backend: `last_psc_inspection`. */
+  lastPscInspection?: string;
+  /** Computed (mock-only). */
+  lastInspection?: string;
+  /** Mock/computed display fields — backend may not expose these directly. */
+  criticalDefects?: number;
+  detentionRisk?: number;
+  edgeServerId?: string;
+  detentionHistory?: unknown[];
+  subscriptionTier?: string;
 }
 
 export interface Inspection {
   id: string;
   vesselId: string;
-  vesselName: string;
-  port: string;
-  mouRegion: MoURegion;
+  /** Mock-only display field; computed from vessels list when backend doesn't expose it. */
+  vesselName?: string;
+  /** Backend: `port_of_inspection`. */
+  portOfInspection: string;
+  mouRegion: MoURegion | string;
   startedAt: string;
-  completedAt: string;
+  completedAt?: string;
   totalItems: number;
   passed: number;
   failed: number;
   criticalDefects: number;
+  inspectorId?: string;
+  synced?: boolean;
+  syncedAt?: string;
 }
 
 export interface Detection {

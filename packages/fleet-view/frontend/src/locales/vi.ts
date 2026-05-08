@@ -163,6 +163,7 @@ const vi = {
   loginInvalidCredentials: 'Tên đăng nhập hoặc mật khẩu không đúng',
   loginGenericError: 'Đăng nhập thất bại',
   loginRolesHint: 'Tài khoản demo theo vai trò: admin · operator · viewer',
+  loginDemoAccounts: 'Tài khoản demo (nhấp để tự động điền)',
   logout: 'Đăng xuất',
 } as const satisfies Record<keyof typeof ko, string>;
 

@@ -163,6 +163,7 @@ const ru = {
   loginInvalidCredentials: 'Неверное имя пользователя или пароль',
   loginGenericError: 'Ошибка входа',
   loginRolesHint: 'Демо-аккаунты по ролям: admin · operator · viewer',
+  loginDemoAccounts: 'Демо-аккаунты (нажмите для автозаполнения)',
   logout: 'Выйти',
 } as const satisfies Record<keyof typeof ko, string>;
 

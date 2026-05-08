@@ -163,6 +163,7 @@ const en = {
   loginInvalidCredentials: 'Invalid username or password',
   loginGenericError: 'Login failed',
   loginRolesHint: 'Demo accounts by role: admin · operator · viewer',
+  loginDemoAccounts: 'Demo accounts (click to auto-fill)',
   logout: 'Sign Out',
 } as const satisfies Record<keyof typeof ko, string>;
 

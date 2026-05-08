@@ -4,6 +4,22 @@ import { LoginError } from '../lib/auth';
 import { useT } from '../lib/i18n';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 
+interface DemoAccount {
+  role: 'admin' | 'operator' | 'viewer';
+  username: string;
+  password: string;
+  color: string;
+}
+
+// Hardcoded demo credentials — these match Railway env vars on bwave-fleet-api.
+// Acceptable for a demo PoC; for production, remove this block and rely on
+// real user provisioning.
+const DEMO_ACCOUNTS: DemoAccount[] = [
+  { role: 'admin',    username: 'admin',    password: 'bwave-admin-97c33e03', color: '#f44336' },
+  { role: 'operator', username: 'operator', password: 'bwave-op-ac5110f3',    color: '#ff9800' },
+  { role: 'viewer',   username: 'viewer',   password: 'bwave-view-65800229',  color: '#4caf50' },
+];
+
 export default function Login() {
   const t = useT();
   const { login } = useAuth();
@@ -112,9 +128,38 @@ export default function Login() {
 
         <div style={{
           marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)',
-          fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.6,
         }}>
-          {t('loginRolesHint')}
+          <div style={{
+            fontSize: 11, color: 'var(--text-muted)',
+            textAlign: 'center', marginBottom: 8,
+          }}>
+            {t('loginDemoAccounts')}
+          </div>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+            {DEMO_ACCOUNTS.map(acc => (
+              <button
+                key={acc.role}
+                type="button"
+                onClick={() => {
+                  setUsername(acc.username);
+                  setPassword(acc.password);
+                  setError(null);
+                }}
+                disabled={submitting}
+                style={{
+                  flex: 1, padding: '6px 8px',
+                  background: 'transparent',
+                  border: `1px solid ${acc.color}`,
+                  color: acc.color,
+                  borderRadius: 6, cursor: 'pointer',
+                  fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
+                  letterSpacing: 0.4,
+                }}
+              >
+                {acc.role}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>

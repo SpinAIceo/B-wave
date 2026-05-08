@@ -163,6 +163,7 @@ const zh = {
   loginInvalidCredentials: '用户名或密码无效',
   loginGenericError: '登录失败',
   loginRolesHint: '按角色的演示账户: admin · operator · viewer',
+  loginDemoAccounts: '演示账户 (点击自动填充)',
   logout: '退出登录',
 } as const satisfies Record<keyof typeof ko, string>;
 
