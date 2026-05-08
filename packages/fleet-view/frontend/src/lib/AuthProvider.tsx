@@ -29,13 +29,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => getStoredUser());
 
   // Re-check stored token periodically — drop if expired.
+  //
+  // BUG FIX: previous code compared object references with `!==`. Since
+  // `getStoredUser()` calls JSON.parse and returns a fresh object every time,
+  // the comparison was always true and `setUser` ran every interval, forcing
+  // the whole subtree to re-render. Now we compare by token expiry which is
+  // the only field that actually changes.
   useEffect(() => {
     const id = setInterval(() => {
-      const u = getStoredUser();
-      if (u !== user) setUser(u);
-    }, 30_000);
+      const fresh = getStoredUser();
+      setUser(prev => {
+        if (prev === null && fresh === null) return prev;
+        if (prev?.expiresAt === fresh?.expiresAt && prev?.username === fresh?.username) {
+          return prev;
+        }
+        return fresh;
+      });
+    }, 60_000);
     return () => clearInterval(id);
-  }, [user]);
+  }, []);
 
   const login = useCallback(async (username: string, password: string) => {
     const u = await loginApi(username, password);

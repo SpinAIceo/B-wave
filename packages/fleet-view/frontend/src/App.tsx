@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import './styles.css';
 import Dashboard from './pages/Dashboard';
-import FleetMap from './pages/FleetMap';
 import VesselList from './pages/VesselList';
 import Reports from './pages/Reports';
 import LogViewer from './pages/LogViewer';
@@ -9,6 +8,10 @@ import Login from './pages/Login';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import { useT } from './lib/i18n';
 import { useAuth } from './lib/AuthProvider';
+
+// FleetMap pulls in mapbox-gl (~700 KB). Lazy-load so users who never visit
+// the map tab don't pay that bandwidth on first load.
+const FleetMap = lazy(() => import('./pages/FleetMap'));
 
 type Page = 'dashboard' | 'map' | 'vessels' | 'reports' | 'logs';
 
@@ -32,7 +35,12 @@ export default function App() {
   const renderPage = () => {
     switch (page) {
       case 'dashboard': return <Dashboard />;
-      case 'map': return <FleetMap />;
+      case 'map':
+        return (
+          <Suspense fallback={<div>{t('loading')}</div>}>
+            <FleetMap />
+          </Suspense>
+        );
       case 'vessels': return <VesselList />;
       case 'reports': return <Reports />;
       case 'logs': return <LogViewer />;

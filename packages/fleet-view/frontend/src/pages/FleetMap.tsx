@@ -1,6 +1,6 @@
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { fetchVessels } from '../api';
 import { useT } from '../lib/i18n';
 import type { Vessel } from '../types';
@@ -33,26 +33,32 @@ export default function FleetMap() {
   // Load vessels
   useEffect(() => { fetchVessels().then(setVessels); }, []);
 
-  // Init map
+  // Init map — only when token is available (mapbox-gl crashes on empty token)
   useEffect(() => {
+    if (noToken) return;
     if (!mapContainer.current || map.current) return;
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/dark-v11',
-      center: [100, 20],
-      zoom: 2,
-      projection: 'mercator',
-    });
-    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    try {
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: 'mapbox://styles/mapbox/dark-v11',
+        center: [100, 20],
+        zoom: 2,
+        projection: 'mercator',
+      });
+      map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    } catch (e) {
+      console.error('Mapbox init failed:', e);
+      map.current = null;
+    }
     return () => {
       map.current?.remove();
       map.current = null;
     };
-  }, []);
+  }, [noToken]);
 
   // Place vessel markers whenever vessels or map change
   useEffect(() => {
-    if (!map.current) return;
+    if (noToken || !map.current) return;
     // Remove old markers
     markers.current.forEach(m => m.remove());
     markers.current = [];
@@ -93,44 +99,63 @@ export default function FleetMap() {
     });
   }, [vessels, t]);
 
+  // .page-content (parent) is a regular block — height:100% would collapse to 0.
+  // Use viewport-relative height to ensure the map always has a visible area.
+  const wrapperStyle: CSSProperties = {
+    position: 'relative',
+    width: '100%',
+    height: 'calc(100vh - 120px)',
+    minHeight: 480,
+    borderRadius: 8,
+    overflow: 'hidden',
+  };
+
   if (noToken) {
     return (
-      <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-        <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />
+      <div style={{
+        ...wrapperStyle,
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        background: '#0a1628', color: '#90a4ae', gap: 12, padding: 24,
+      }}>
+        <span style={{ fontSize: 40 }}>🗺️</span>
+        <p style={{ margin: 0, fontSize: 14, textAlign: 'center', color: '#e0e0e0' }}>
+          Mapbox token not set — set{' '}
+          <code style={{ background: '#1e3a5f', padding: '2px 6px', borderRadius: 4, color: '#fff' }}>
+            VITE_MAPBOX_TOKEN
+          </code>{' '}
+          to enable the live map.
+        </p>
+        <p style={{ margin: 0, fontSize: 12, color: '#546e7a' }}>
+          Vessels still load below — token only needed for tile rendering.
+        </p>
         <div style={{
-          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(10,20,40,0.85)', color: '#90a4ae', gap: 12,
+          display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap',
+          justifyContent: 'center', maxWidth: 800,
         }}>
-          <span style={{ fontSize: 40 }}>🗺️</span>
-          <p style={{ margin: 0, fontSize: 14 }}>
-            Mapbox token not set. Add{' '}
-            <code style={{ background: '#1e3a5f', padding: '2px 6px', borderRadius: 4 }}>
-              VITE_MAPBOX_TOKEN
-            </code>{' '}
-            to <code>.env</code> to enable the live map.
-          </p>
-          <p style={{ margin: 0, fontSize: 12, color: '#546e7a' }}>
-            Vessels are still loaded — token required only for tile rendering.
-          </p>
-          <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {vessels.map(v => (
-              <div key={v.id} style={{
-                background: '#111d33', border: `1px solid ${vesselColor(v)}`,
-                borderRadius: 6, padding: '6px 12px', fontSize: 12,
-              }}>
-                <span style={{ color: vesselColor(v), fontWeight: 700 }}>●</span>{' '}
-                {v.name} ({v.flag})
-              </div>
-            ))}
-          </div>
+          {vessels.length === 0 ? (
+            <div style={{ color: '#546e7a', fontSize: 13 }}>No vessels loaded yet…</div>
+          ) : vessels.map(v => (
+            <div key={v.id} style={{
+              background: '#111d33', border: `1px solid ${vesselColor(v)}`,
+              borderRadius: 6, padding: '6px 12px', fontSize: 12, color: '#e0e0e0',
+            }}>
+              <span style={{ color: vesselColor(v), fontWeight: 700 }}>●</span>{' '}
+              {v.name} ({v.flag})
+              {(v.criticalDefects ?? 0) > 0 && (
+                <span style={{ color: '#f44336', marginLeft: 6, fontWeight: 700 }}>
+                  ⚠ {v.criticalDefects}
+                </span>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div style={wrapperStyle}>
       <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />
       {/* Legend */}
       <div style={{
