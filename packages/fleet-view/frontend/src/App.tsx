@@ -5,14 +5,21 @@ import FleetMap from './pages/FleetMap';
 import VesselList from './pages/VesselList';
 import Reports from './pages/Reports';
 import LogViewer from './pages/LogViewer';
+import Login from './pages/Login';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import { useT } from './lib/i18n';
+import { useAuth } from './lib/AuthProvider';
 
 type Page = 'dashboard' | 'map' | 'vessels' | 'reports' | 'logs';
 
 export default function App() {
   const t = useT();
+  const { isAuthenticated, user, logout } = useAuth();
   const [page, setPage] = useState<Page>('dashboard');
+
+  if (!isAuthenticated) {
+    return <Login />;
+  }
 
   const NAV_ITEMS: { id: Page; label: string; icon: string }[] = [
     { id: 'dashboard', label: t('navDashboard'), icon: '📊' },
@@ -60,16 +67,25 @@ export default function App() {
           <div className="topbar-actions" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <LanguageSwitcher />
             <span style={{ cursor: 'pointer', fontSize: 20 }}>🔔</span>
-            <span
-              style={{
-                width: 32, height: 32, borderRadius: '50%',
-                background: 'var(--primary)', display: 'inline-flex',
-                alignItems: 'center', justifyContent: 'center',
-                fontSize: 14, fontWeight: 700,
-              }}
-            >
-              SM
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ textAlign: 'right', lineHeight: 1.2 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{user?.username}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                  {user?.role}
+                </div>
+              </div>
+              <button
+                onClick={logout}
+                title={t('logout')}
+                style={{
+                  background: 'transparent', border: '1px solid var(--border)',
+                  color: 'var(--text-secondary)', padding: '6px 10px',
+                  borderRadius: 6, cursor: 'pointer', fontSize: 12,
+                }}
+              >
+                {t('logout')}
+              </button>
+            </div>
           </div>
         </header>
         <div className="page-content">

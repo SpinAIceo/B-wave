@@ -153,6 +153,17 @@ const en = {
   clearFilter: 'Show All',
   defectsInZone: 'Defects in {zone}',
   noDefectsInZone: 'No defects in this zone',
+
+  // Auth
+  loginUsername: 'Username',
+  loginPassword: 'Password',
+  loginSubmit: 'Sign In',
+  loginSubmitting: 'Signing in...',
+  loginRequired: 'Please enter both username and password',
+  loginInvalidCredentials: 'Invalid username or password',
+  loginGenericError: 'Login failed',
+  loginRolesHint: 'Demo accounts by role: admin · operator · viewer',
+  logout: 'Sign Out',
 } as const satisfies Record<keyof typeof ko, string>;
 
 export default en;

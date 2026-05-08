@@ -153,6 +153,17 @@ const ru = {
   clearFilter: 'Показать все',
   defectsInZone: 'Дефекты в зоне {zone}',
   noDefectsInZone: 'В этой зоне нет дефектов',
+
+  // Auth
+  loginUsername: 'Имя пользователя',
+  loginPassword: 'Пароль',
+  loginSubmit: 'Войти',
+  loginSubmitting: 'Вход...',
+  loginRequired: 'Введите имя пользователя и пароль',
+  loginInvalidCredentials: 'Неверное имя пользователя или пароль',
+  loginGenericError: 'Ошибка входа',
+  loginRolesHint: 'Демо-аккаунты по ролям: admin · operator · viewer',
+  logout: 'Выйти',
 } as const satisfies Record<keyof typeof ko, string>;
 
 export default ru;

@@ -6,11 +6,36 @@ import type {
   Zone,
 } from './types';
 import { logger } from './lib/logger';
+import { getStoredToken } from './lib/auth';
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? '') + '/api/v1';
 const USE_MOCKS = !import.meta.env.VITE_API_URL || import.meta.env.VITE_USE_MOCKS === 'true';
 
 logger.info('api', `mode=${USE_MOCKS ? 'MOCK' : 'LIVE'} base=${API_BASE}`);
+
+/**
+ * Auth-aware fetch wrapper:
+ *   - Attaches `Authorization: Bearer <token>` if stored
+ *   - On 401 → triggers global force-logout (set up in AuthProvider)
+ *   - Throws on non-2xx, returns parsed JSON on success
+ */
+async function authFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getStoredToken();
+  const headers = new Headers(init?.headers);
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  const resp = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  if (resp.status === 401) {
+    const forceLogout = (window as unknown as { __bwaveForceLogout?: () => void }).__bwaveForceLogout;
+    forceLogout?.();
+    throw new Error('HTTP 401 — session expired');
+  }
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
+  return resp.json() as Promise<T>;
+}
 
 async function fetchOrMock<T>(label: string, fetcher: () => Promise<T>, mockData: T): Promise<T> {
   if (USE_MOCKS) {
@@ -103,7 +128,7 @@ const MOCK_OVERVIEW: DashboardOverview = {
 export function fetchVessels(): Promise<Vessel[]> {
   return fetchOrMock(
     'GET /api/v1/vessels',
-    () => fetch(`${API_BASE}/vessels`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+    () => authFetch<Vessel[]>('/vessels'),
     MOCK_VESSELS,
   );
 }
@@ -111,7 +136,7 @@ export function fetchVessels(): Promise<Vessel[]> {
 export function fetchVessel(id: string): Promise<Vessel | undefined> {
   return fetchOrMock(
     `GET /api/v1/vessels/${id}`,
-    () => fetch(`${API_BASE}/vessels/${id}`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+    () => authFetch<Vessel>(`/vessels/${id}`),
     MOCK_VESSELS.find(v => v.id === id),
   );
 }
@@ -119,7 +144,7 @@ export function fetchVessel(id: string): Promise<Vessel | undefined> {
 export function fetchDashboardOverview(): Promise<DashboardOverview> {
   return fetchOrMock(
     'GET /api/v1/dashboard/overview',
-    () => fetch(`${API_BASE}/dashboard/overview`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+    () => authFetch<DashboardOverview>('/dashboard/overview'),
     MOCK_OVERVIEW,
   );
 }
@@ -130,7 +155,7 @@ export function fetchInspections(vesselId?: string): Promise<Inspection[]> {
     : MOCK_INSPECTIONS;
   return fetchOrMock(
     `GET /api/v1/vessels/${vesselId ?? 'all'}/inspections`,
-    () => fetch(`${API_BASE}/vessels/${vesselId ?? 'all'}/inspections`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+    () => authFetch<Inspection[]>(`/vessels/${vesselId ?? 'all'}/inspections`),
     filtered,
   );
 }
@@ -140,7 +165,7 @@ export function fetchDetections(inspectionId: string): Promise<Detection[]> {
   const mockData = MOCK_DETECTIONS.filter(d => ids.includes(d.id));
   return fetchOrMock(
     `GET /api/v1/inspections/${inspectionId}/detections`,
-    () => fetch(`${API_BASE}/inspections/${inspectionId}/detections`).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+    () => authFetch<Detection[]>(`/inspections/${inspectionId}/detections`),
     mockData,
   );
 }
@@ -173,10 +198,7 @@ export async function fetchVesselZoneSummary(vesselId: string): Promise<Record<Z
 
   return fetchOrMock(
     `GET /api/v1/vessels/${vesselId}/zone-summary`,
-    () => fetch(`${API_BASE}/vessels/${vesselId}/zone-summary`).then(r => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return r.json() as Promise<Record<Zone, number>>;
-    }),
+    () => authFetch<Record<Zone, number>>(`/vessels/${vesselId}/zone-summary`),
     mockSummary,
   );
 }
@@ -185,11 +207,11 @@ export function triggerReport(vesselId: string, type: string): Promise<{ reportI
   logger.info('api', `triggerReport vessel=${vesselId} type=${type}`);
   return fetchOrMock(
     'POST /api/v1/reports/generate',
-    () => fetch(`${API_BASE}/reports/generate`, {
+    () => authFetch<{ reportId: string }>('/reports/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ vessel_id: vesselId, report_type: type }),
-    }).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+    }),
     { reportId: `RPT-${vesselId}-${type}-${Date.now()}` },
   );
 }

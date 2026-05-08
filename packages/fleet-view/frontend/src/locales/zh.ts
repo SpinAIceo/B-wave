@@ -153,6 +153,17 @@ const zh = {
   clearFilter: '显示全部',
   defectsInZone: '{zone} 的缺陷',
   noDefectsInZone: '此区域无缺陷',
+
+  // Auth
+  loginUsername: '用户名',
+  loginPassword: '密码',
+  loginSubmit: '登录',
+  loginSubmitting: '登录中...',
+  loginRequired: '请输入用户名和密码',
+  loginInvalidCredentials: '用户名或密码无效',
+  loginGenericError: '登录失败',
+  loginRolesHint: '按角色的演示账户: admin · operator · viewer',
+  logout: '退出登录',
 } as const satisfies Record<keyof typeof ko, string>;
 
 export default zh;

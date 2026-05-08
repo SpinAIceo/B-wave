@@ -151,6 +151,17 @@ const ko = {
   clearFilter: '전체 보기',
   defectsInZone: '{zone}의 결함',
   noDefectsInZone: '이 구역에 결함 없음',
+
+  // Auth
+  loginUsername: '사용자명',
+  loginPassword: '비밀번호',
+  loginSubmit: '로그인',
+  loginSubmitting: '로그인 중...',
+  loginRequired: '사용자명과 비밀번호를 입력하세요',
+  loginInvalidCredentials: '사용자명 또는 비밀번호가 올바르지 않습니다',
+  loginGenericError: '로그인 실패',
+  loginRolesHint: '권한별 데모 계정: admin · operator · viewer',
+  logout: '로그아웃',
 } as const;
 
 export default ko;

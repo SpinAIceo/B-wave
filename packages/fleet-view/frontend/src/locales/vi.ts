@@ -153,6 +153,17 @@ const vi = {
   clearFilter: 'Hiện tất cả',
   defectsInZone: 'Khuyết tật ở {zone}',
   noDefectsInZone: 'Không có khuyết tật ở khu vực này',
+
+  // Auth
+  loginUsername: 'Tên đăng nhập',
+  loginPassword: 'Mật khẩu',
+  loginSubmit: 'Đăng nhập',
+  loginSubmitting: 'Đang đăng nhập...',
+  loginRequired: 'Vui lòng nhập tên đăng nhập và mật khẩu',
+  loginInvalidCredentials: 'Tên đăng nhập hoặc mật khẩu không đúng',
+  loginGenericError: 'Đăng nhập thất bại',
+  loginRolesHint: 'Tài khoản demo theo vai trò: admin · operator · viewer',
+  logout: 'Đăng xuất',
 } as const satisfies Record<keyof typeof ko, string>;
 
 export default vi;

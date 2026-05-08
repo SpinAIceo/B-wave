@@ -153,6 +153,17 @@ const tl = {
   clearFilter: 'Ipakita Lahat',
   defectsInZone: 'Mga depekto sa {zone}',
   noDefectsInZone: 'Walang depekto sa zone na ito',
+
+  // Auth
+  loginUsername: 'Username',
+  loginPassword: 'Password',
+  loginSubmit: 'Mag-Login',
+  loginSubmitting: 'Nagla-login...',
+  loginRequired: 'Pakilagay ang username at password',
+  loginInvalidCredentials: 'Mali ang username o password',
+  loginGenericError: 'Nabigo ang pag-login',
+  loginRolesHint: 'Demo accounts ayon sa role: admin · operator · viewer',
+  logout: 'Mag-Logout',
 } as const satisfies Record<keyof typeof ko, string>;
 
 export default tl;

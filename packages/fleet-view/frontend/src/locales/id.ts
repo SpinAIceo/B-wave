@@ -153,6 +153,17 @@ const id = {
   clearFilter: 'Tampilkan Semua',
   defectsInZone: 'Cacat di {zone}',
   noDefectsInZone: 'Tidak ada cacat di zona ini',
+
+  // Auth
+  loginUsername: 'Nama Pengguna',
+  loginPassword: 'Kata Sandi',
+  loginSubmit: 'Masuk',
+  loginSubmitting: 'Sedang masuk...',
+  loginRequired: 'Masukkan nama pengguna dan kata sandi',
+  loginInvalidCredentials: 'Nama pengguna atau kata sandi tidak valid',
+  loginGenericError: 'Gagal masuk',
+  loginRolesHint: 'Akun demo per peran: admin · operator · viewer',
+  logout: 'Keluar',
 } as const satisfies Record<keyof typeof ko, string>;
 
 export default id;
