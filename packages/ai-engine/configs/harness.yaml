@@ -1,0 +1,116 @@
+# Inference Harness configuration — post-processing rules applied to every
+# YOLO detection at runtime.
+#
+# Edit this file to tune precision/recall per zone without retraining the model.
+# Re-fit `calibration.temperature` after each model upgrade by running:
+#   python -m ai_engine.scripts.fit_calibration --val-set <dir> --out configs/harness.yaml
+
+# ── 1. Confidence calibration ────────────────────────────────────────────────
+# Temperature T applied as: calibrated = sigmoid(logit(p) / T).
+#   T = 1.0  → no-op (default until you fit)
+#   T > 1.0  → cools overconfident outputs (typical for raw YOLO)
+#   T < 1.0  → sharpens underconfident outputs
+calibration:
+  temperature: 1.0
+
+# ── 2. Default threshold ─────────────────────────────────────────────────────
+default_threshold: 0.25
+
+# ── 3. Per-zone thresholds (post-calibration, post-context) ──────────────────
+# Lower = more recall (catch more, accept more FP). Higher = stricter.
+# These reflect domain priors:
+#   - Hull surfaces (rust common) → low rust threshold
+#   - Engine room (leaks common) → low leak threshold
+#   - Deck (cargo & signage) → tuned for cargo_lashing / missing_label
+zone_thresholds:
+  bow:
+    rust: 0.20
+    damage: 0.20
+    leak: 0.40
+    missing_label: 0.30
+    cargo_lashing: 0.40
+  midship:
+    rust: 0.25
+    damage: 0.25
+    leak: 0.35
+    missing_label: 0.30
+    cargo_lashing: 0.30
+  stern:
+    rust: 0.25
+    damage: 0.25
+    leak: 0.30
+    missing_label: 0.30
+    cargo_lashing: 0.35
+  deck:
+    rust: 0.30
+    damage: 0.25
+    leak: 0.40
+    missing_label: 0.20
+    cargo_lashing: 0.20
+  hull:
+    rust: 0.18
+    damage: 0.30
+    leak: 0.45
+    missing_label: 0.40
+    cargo_lashing: 0.50
+  engine_room:
+    rust: 0.22
+    damage: 0.25
+    leak: 0.20
+    missing_label: 0.30
+    cargo_lashing: 0.50
+  default:
+    rust: 0.25
+    damage: 0.25
+    leak: 0.25
+    missing_label: 0.30
+    cargo_lashing: 0.30
+
+# ── 4. Context rules ─────────────────────────────────────────────────────────
+# Per-zone allowlists & multiplicative priors. A class missing from the
+# allowed list gets confidence × `disallowed_penalty`; an entry in `priors`
+# multiplies confidence by that factor (>1 boosts, <1 demotes).
+context_rules:
+  disallowed_penalty: 0.4
+
+  zones:
+    bow:
+      allowed: [rust, damage, missing_label]
+      priors:
+        rust: 1.10
+        damage: 1.15
+    midship:
+      allowed: [rust, damage, leak, missing_label]
+      priors: {}
+    stern:
+      allowed: [rust, damage, leak, missing_label]
+      priors:
+        leak: 1.10
+    deck:
+      allowed: [cargo_lashing, missing_label, damage, rust]
+      priors:
+        cargo_lashing: 1.15
+        missing_label: 1.10
+    hull:
+      allowed: [rust, damage]
+      priors:
+        rust: 1.20
+    engine_room:
+      allowed: [leak, rust, damage, missing_label]
+      priors:
+        leak: 1.25
+        rust: 1.05
+
+  vessel_types:
+    bulk:
+      cargo_lashing: 0.6
+    tanker:
+      cargo_lashing: 0.4
+      leak: 1.10
+    container:
+      cargo_lashing: 1.20
+    roro:
+      cargo_lashing: 1.15
+    gas:
+      leak: 1.15
+      cargo_lashing: 0.5

@@ -82,6 +82,7 @@ async def detect(
     file: UploadFile = File(...),
     vessel_id: str = "V001",
     zone: str = "midship",
+    vessel_type: str | None = None,
 ):
     if not file.content_type or not file.content_type.startswith("image/"):
         log.warning(f"[detect] rejected: content_type={file.content_type} vessel={vessel_id}")
@@ -91,9 +92,9 @@ async def detect(
     if len(contents) > 20 * 1024 * 1024:
         log.warning(f"[detect] rejected: oversized {size_kb:.0f}KB vessel={vessel_id}")
         raise HTTPException(status_code=413, detail="Image too large (max 20MB)")
-    log.info(f"[detect] start vessel={vessel_id} zone={zone} file={file.filename} size={size_kb:.0f}KB")
+    log.info(f"[detect] start vessel={vessel_id} zone={zone} type={vessel_type or '-'} file={file.filename} size={size_kb:.0f}KB")
     try:
-        result = run_inference(contents)
+        result = run_inference(contents, zone=zone, vessel_type=vessel_type)
         scan_id = save_scan(vessel_id, file.filename or "upload.jpg", result, zone=zone)
         log.info(
             f"[detect] done vessel={vessel_id} scan={scan_id} "

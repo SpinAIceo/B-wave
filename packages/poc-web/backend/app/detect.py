@@ -7,8 +7,12 @@ from pathlib import Path
 
 from PIL import Image
 
+from app.harness import HarnessContext, InferenceHarness
 from app.logger import get_logger
 from app.models import BBox, DetectResponse
+
+# Loaded once at import; safe to share across requests (stateless).
+_HARNESS = InferenceHarness.load_default()
 
 log = get_logger("bwave.detect")
 
@@ -146,7 +150,11 @@ def _load_model():
         _model_loaded = True
 
 
-def run_inference(image_bytes: bytes) -> DetectResponse:
+def run_inference(
+    image_bytes: bytes,
+    zone: str | None = None,
+    vessel_type: str | None = None,
+) -> DetectResponse:
     # ── STEP 1/6: 이미지 수신 (Image received) ────────────────────────────────
     log.info(f"[STEP 1/6] 이미지 수신 | image received — {len(image_bytes)/1024:.1f} KB")
 
@@ -178,24 +186,41 @@ def run_inference(image_bytes: bytes) -> DetectResponse:
     import torch
     device = 0 if torch.cuda.is_available() else "cpu"
     device_label = f"GPU(cuda:{device})" if device == 0 else "CPU"
-    log.info(f"[STEP 4/6] 모델 추론 시작 | inference start — device={device_label} conf_threshold=0.25")
+    # Lower conf=0.05 since the harness applies its own (calibrated, per-zone)
+    # thresholds afterward. This lets the harness see candidates the model
+    # would otherwise drop.
+    log.info(f"[STEP 4/6] 모델 추론 시작 | inference start — device={device_label} conf_threshold=0.05 (harness re-thresholds)")
     t0 = time.perf_counter()
-    results = _model.predict(image, conf=0.25, verbose=False, device=device)
+    results = _model.predict(image, conf=0.05, verbose=False, device=device)
     elapsed_ms = (time.perf_counter() - t0) * 1000
     raw_count = sum(len(r.boxes) for r in results if r.boxes is not None)
-    log.info(f"           └─ 완료 {elapsed_ms:.1f}ms | done in {elapsed_ms:.1f}ms — raw boxes={raw_count}")
+    log.info(
+        f"           └─ 완료 {elapsed_ms:.1f}ms | done in {elapsed_ms:.1f}ms — raw boxes={raw_count}"
+        f"  harness ctx zone={zone or '-'} vessel_type={vessel_type or '-'}"
+    )
+    harness_ctx = HarnessContext(zone=zone, vessel_type=vessel_type)
 
-    # ── STEP 5/6: PSC 코드 매핑 + 심각도 분류 (PSC mapping + severity) ────────
-    log.info(f"[STEP 5/6] PSC 매핑 + 심각도 분류 | PSC mapping + severity classification")
+    # ── STEP 5/6: Harness 후처리 + PSC 매핑 + 심각도 분류 ───────────────────
+    log.info(f"[STEP 5/6] Harness 후처리 (calibration→context→zone-threshold) + PSC 매핑")
     detections: list[BBox] = []
+    dropped_by_harness = 0
     for result in results:
         if result.boxes is None:
             continue
         for box in result.boxes:
             cls_id   = int(box.cls[0].item())
-            conf     = float(box.conf[0].item())
+            raw_conf = float(box.conf[0].item())
             xyxy     = box.xyxy[0].cpu().numpy()
             cls_name = result.names.get(cls_id, "unknown")
+
+            # Harness adjusts confidence (calibration + context priors) and
+            # decides whether the detection meets the per-(zone,class) threshold.
+            adj_conf, kept = _HARNESS.adjust(cls_name, raw_conf, harness_ctx)
+            if not kept:
+                dropped_by_harness += 1
+                continue
+            conf = adj_conf
+
             psc_code = _PSC_CODE.get(cls_name, "9999")
             psc_desc = _PSC_DESC_EN.get(psc_code, "Unknown deficiency")
             severity = _severity(conf)
@@ -238,6 +263,7 @@ def run_inference(image_bytes: bytes) -> DetectResponse:
     log.info(
         f"[STEP 6/6] 응답 생성 완료 | response built — "
         f"총 탐지={len(detections)}건 / total={len(detections)} detections  "
+        f"harness dropped={dropped_by_harness} (raw={raw_count})  "
         f"심각도: {ko_summary} / severity: {severity_summary}  "
         f"추론시간={elapsed_ms:.1f}ms"
     )
