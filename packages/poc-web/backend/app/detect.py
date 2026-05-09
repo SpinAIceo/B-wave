@@ -154,21 +154,39 @@ def _harness_trace_log(idx: int, total: int, cls_name: str,
 
 
 def _find_model() -> Path | None:
-    candidates: list[Path] = []
+    """Locate the best inference artifact, preferring optimized formats.
+
+    Lookup priority (fastest → slowest):
+      1. MODEL_PATH env var (operator override; respects whatever they set)
+      2. *_int8.engine   (TensorRT INT8 — fastest, NVIDIA-only)
+      3. best.engine     (TensorRT FP16 — very fast, NVIDIA-only)
+      4. best.onnx       (FP16 ONNX — works on CPU/GPU, decent speed)
+      5. best.pt         (PyTorch — slowest, but always works)
+    """
     env_path = os.environ.get("MODEL_PATH", "")
     if env_path:
-        candidates.append(Path(env_path))
-    # Prefer .pt on local dev (no onnxruntime conflicts); prefer .onnx in Docker
-    candidates += [
-        Path(__file__).parent.parent / "model" / "best.pt",
-        Path(__file__).parent.parent / "model" / "best.onnx",
-        Path("runs/detect/runs/train/bwave-yolo26s-v1/weights/best.pt"),
-        Path("runs/detect/runs/train/bwave-yolo26s-v1/weights/best.onnx"),
+        p = Path(env_path)
+        if p.exists() and p.is_file():
+            log.info(f"model found via MODEL_PATH: {p}")
+            return p
+
+    search_dirs = [
+        Path(__file__).parent.parent / "model",
+        Path("runs/detect/runs/train/bwave-yolo26s-v1/weights"),
     ]
+    # Order matters — first match wins; prefer faster formats.
+    preferred_names = [
+        "best_int8.engine",
+        "best.engine",
+        "best.onnx",
+        "best.pt",
+    ]
+    candidates: list[Path] = [d / n for d in search_dirs for n in preferred_names]
+
     log.debug(f"model search candidates={[str(c) for c in candidates]}")
     for p in candidates:
         if p.exists() and p.is_file():
-            log.info(f"model found: {p}")
+            log.info(f"model found: {p}  (format={p.suffix})")
             return p
     log.warning("no model file found — will use demo response")
     return None
@@ -176,29 +194,66 @@ def _find_model() -> Path | None:
 
 _model = None
 _model_loaded = False
+_model_meta: dict = {}  # populated on load — {format, device, precision}
 
 
 def _load_model():
-    global _model, _model_loaded
+    """Load the best available model artifact and switch precision to FP16
+    on CUDA. The choice of format (.engine / .onnx / .pt) is decided by
+    `_find_model`; this function honours that choice and just toggles
+    runtime knobs (device, half-precision)."""
+    global _model, _model_loaded, _model_meta
     if _model_loaded:
         return
     model_path = _find_model()
     if model_path is None:
         _model_loaded = True
+        _model_meta = {"format": "demo", "device": "n/a", "precision": "n/a"}
         return
     log.info(f"loading model from {model_path} …")
     try:
         import torch
         from ultralytics import YOLO
+
         _model = YOLO(str(model_path))
         device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        suffix = model_path.suffix.lower()
+        # TensorRT engines bake precision into the export — don't touch them.
+        # ONNX runs through onnxruntime; precision is set at export time.
+        # Only .pt benefits from runtime .half() on CUDA.
+        precision = "fp32"
         if device == "cuda":
             _model.to("cuda")
+            if suffix == ".pt":
+                try:
+                    _model.model.half()  # fp16 on the underlying torch module
+                    precision = "fp16"
+                except Exception as exc:
+                    log.warning(f"  .half() failed, staying at FP32: {exc!r}")
+            else:
+                # .engine / .onnx already carry their own precision
+                if "int8" in model_path.name.lower():
+                    precision = "int8"
+                elif suffix in (".engine", ".onnx"):
+                    precision = "fp16"  # we export with half=True
+
         _model_loaded = True
-        log.info(f"model loaded OK device={device}")
+        _model_meta = {
+            "format": suffix.lstrip("."),
+            "device": device,
+            "precision": precision,
+            "path": str(model_path),
+        }
+        log.info(
+            f"model loaded OK | format={_model_meta['format']} "
+            f"precision={precision} device={device}"
+        )
     except Exception as exc:
         log.error(f"model load FAILED: {exc!r} — falling back to demo mode")
         _model_loaded = True
+        _model_meta = {"format": "demo", "device": "n/a", "precision": "n/a",
+                       "error": repr(exc)}
 
 
 def run_inference(
@@ -251,10 +306,15 @@ def run_inference(
     import torch
     device = 0 if torch.cuda.is_available() else "cpu"
     device_label = f"GPU(cuda:{device})" if device == 0 else "CPU"
+    fmt = _model_meta.get("format", "?")
+    prec = _model_meta.get("precision", "?")
     # Lower conf=0.05 since the harness applies its own (calibrated, per-zone)
     # thresholds afterward. This lets the harness see candidates the model
     # would otherwise drop.
-    log.info(f"[STEP 5/8] 모델 추론 시작 | inference start — device={device_label} model_conf=0.05")
+    log.info(
+        f"[STEP 5/8] 모델 추론 시작 | inference start — "
+        f"device={device_label} format={fmt} precision={prec} model_conf=0.05"
+    )
     t0 = time.perf_counter()
     results = _model.predict(image, conf=0.05, verbose=False, device=device)
     elapsed_ms = (time.perf_counter() - t0) * 1000
