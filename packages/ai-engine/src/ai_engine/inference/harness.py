@@ -58,6 +58,27 @@ class HarnessContext:
     inspection_mode: str | None = None
 
 
+DROP_BELOW_THRESHOLD = "below_threshold"
+DROP_NOT_ALLOWED_IN_ZONE = "not_allowed_in_zone"
+
+
+@dataclass
+class HarnessTrace:
+    """Per-detection trace returned by adjust_with_trace().
+    Lets callers reconstruct WHY a detection was kept/dropped, step by step."""
+    raw_confidence: float
+    calibrated_confidence: float
+    allowed_in_zone: bool
+    allowlist_factor: float
+    zone_prior_factor: float
+    vessel_type_factor: float
+    final_confidence: float
+    threshold_applied: float
+    threshold_zone_key: str
+    kept: bool
+    drop_reason: str | None
+
+
 @dataclass
 class HarnessConfig:
     calibration_T: float = 1.0
@@ -159,57 +180,121 @@ class InferenceHarness:
         context: HarnessContext | None = None,
     ) -> list[Detection]:
         """Apply calibration → context filter → zone threshold; return new list."""
-        ctx = context or HarnessContext()
-        T = self.config.calibration_T
-
         out: list[Detection] = []
         for det in detections:
-            conf = temperature_scale(det.confidence, T)
-            conf *= self._context_factor(det.class_name, ctx)
-            conf = max(0.0, min(1.0, conf))
-
-            if conf < self._threshold_for(det.class_name, ctx.zone):
+            kept, new_conf, _ = self._evaluate(det.class_name, det.confidence, context)
+            if not kept:
                 continue
-
             out.append(Detection(
                 x_min=det.x_min, y_min=det.y_min,
                 x_max=det.x_max, y_max=det.y_max,
                 class_id=det.class_id, class_name=det.class_name,
-                confidence=conf,
+                confidence=new_conf,
             ))
         return out
 
+    def process_with_traces(
+        self,
+        detections: list[Detection],
+        context: HarnessContext | None = None,
+    ) -> list[tuple[Detection, HarnessTrace, bool]]:
+        """Same as process(), but returns (Detection, HarnessTrace, kept) for
+        every input — including dropped ones — so callers can log the chain.
+        The Detection's confidence is the final adjusted value."""
+        out: list[tuple[Detection, HarnessTrace, bool]] = []
+        for det in detections:
+            kept, new_conf, trace = self._evaluate(det.class_name, det.confidence, context)
+            adjusted = Detection(
+                x_min=det.x_min, y_min=det.y_min,
+                x_max=det.x_max, y_max=det.y_max,
+                class_id=det.class_id, class_name=det.class_name,
+                confidence=new_conf,
+            )
+            out.append((adjusted, trace, kept))
+        return out
+
+    def describe(self) -> dict:
+        """Snapshot of the loaded configuration — useful at startup."""
+        return {
+            "calibration_T": self.config.calibration_T,
+            "default_threshold": self.config.default_threshold,
+            "zones_with_thresholds": sorted(self.config.zone_thresholds.keys()),
+            "zones_with_allowlist": sorted(self.config.zone_allowed.keys()),
+            "vessel_types": sorted(self.config.vessel_type_modifiers.keys()),
+            "disallowed_penalty": self.config.disallowed_penalty,
+        }
+
     # Internals -----------------------------------------------------------------
+
+    def _evaluate(
+        self, class_name: str, raw_conf: float, context: HarnessContext | None
+    ) -> tuple[bool, float, HarnessTrace]:
+        """Single-detection pipeline. Returns (kept, final_conf, trace)."""
+        ctx = context or HarnessContext()
+        calibrated = temperature_scale(raw_conf, self.config.calibration_T)
+
+        allowed_in_zone, allowlist_f = self._allowlist_factor(class_name, ctx)
+        zone_prior_f = self._zone_prior_factor(class_name, ctx)
+        vessel_type_f = self._vessel_type_factor(class_name, ctx)
+
+        final = calibrated * allowlist_f * zone_prior_f * vessel_type_f
+        final = max(0.0, min(1.0, final))
+
+        zone_key = ctx.zone if (ctx.zone and ctx.zone in self.config.zone_thresholds) else "default"
+        threshold = self._threshold_for(class_name, ctx.zone)
+        kept = final >= threshold
+
+        trace = HarnessTrace(
+            raw_confidence=raw_conf,
+            calibrated_confidence=calibrated,
+            allowed_in_zone=allowed_in_zone,
+            allowlist_factor=allowlist_f,
+            zone_prior_factor=zone_prior_f,
+            vessel_type_factor=vessel_type_f,
+            final_confidence=final,
+            threshold_applied=threshold,
+            threshold_zone_key=zone_key,
+            kept=kept,
+            drop_reason=None if kept else DROP_BELOW_THRESHOLD,
+        )
+        return kept, final, trace
 
     def _threshold_for(self, class_name: str, zone: str | None) -> float:
         zone_key = zone if (zone and zone in self.config.zone_thresholds) else "default"
         zone_map = self.config.zone_thresholds.get(zone_key, {})
         return zone_map.get(class_name, self.config.default_threshold)
 
-    def _context_factor(self, class_name: str, ctx: HarnessContext) -> float:
-        factor = 1.0
+    def _allowlist_factor(
+        self, class_name: str, ctx: HarnessContext
+    ) -> tuple[bool, float]:
+        if not ctx.zone:
+            return True, 1.0
+        allowed = self.config.zone_allowed.get(ctx.zone)
+        if allowed is None:
+            return True, 1.0
+        if class_name in allowed:
+            return True, 1.0
+        return False, self.config.disallowed_penalty
 
-        if ctx.zone:
-            allowed = self.config.zone_allowed.get(ctx.zone)
-            if allowed and class_name not in allowed:
-                factor *= self.config.disallowed_penalty
-            zone_prior = self.config.zone_priors.get(ctx.zone, {}).get(class_name)
-            if zone_prior is not None:
-                factor *= zone_prior
+    def _zone_prior_factor(self, class_name: str, ctx: HarnessContext) -> float:
+        if not ctx.zone:
+            return 1.0
+        return self.config.zone_priors.get(ctx.zone, {}).get(class_name, 1.0)
 
-        if ctx.vessel_type:
-            vt_mods = self.config.vessel_type_modifiers.get(ctx.vessel_type.lower(), {})
-            mod = vt_mods.get(class_name)
-            if mod is not None:
-                factor *= mod
-
-        return factor
+    def _vessel_type_factor(self, class_name: str, ctx: HarnessContext) -> float:
+        if not ctx.vessel_type:
+            return 1.0
+        vt_mods = self.config.vessel_type_modifiers.get(ctx.vessel_type.lower(), {})
+        return vt_mods.get(class_name, 1.0)
 
 
 __all__ = [
     "Detection",
     "HarnessContext",
     "HarnessConfig",
+    "HarnessTrace",
     "InferenceHarness",
     "temperature_scale",
+    "DROP_BELOW_THRESHOLD",
+    "DROP_NOT_ALLOWED_IN_ZONE",
 ]

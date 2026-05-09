@@ -7,8 +7,10 @@ import pytest
 
 from ai_engine.inference.engine import Detection
 from ai_engine.inference.harness import (
+    DROP_BELOW_THRESHOLD,
     HarnessConfig,
     HarnessContext,
+    HarnessTrace,
     InferenceHarness,
     temperature_scale,
 )
@@ -197,3 +199,72 @@ def test_unknown_zone_uses_default_thresholds():
     # zone="cabin" not in config → uses default → 0.30 dropped
     out = h.process([_det("rust", 0.30)], HarnessContext(zone="cabin"))
     assert out == []
+
+
+# ── trace API ────────────────────────────────────────────────────────────────
+
+
+def test_process_with_traces_returns_per_detection_trace():
+    h = InferenceHarness(HarnessConfig(
+        calibration_T=2.0,
+        default_threshold=0.30,
+        zone_thresholds={"hull": {"rust": 0.20, "leak": 0.50}},
+        zone_allowed={"hull": ["rust"]},
+        zone_priors={"hull": {"rust": 1.10}},
+        disallowed_penalty=0.4,
+    ))
+    out = h.process_with_traces(
+        [_det("rust", 0.40), _det("leak", 0.50)],
+        HarnessContext(zone="hull", vessel_type="bulk"),
+    )
+    assert len(out) == 2
+
+    rust_det, rust_trace, rust_kept = out[0]
+    leak_det, leak_trace, leak_kept = out[1]
+
+    # rust: allowed, gets boosted, kept
+    assert isinstance(rust_trace, HarnessTrace)
+    assert rust_trace.allowed_in_zone is True
+    assert rust_trace.allowlist_factor == 1.0
+    assert rust_trace.zone_prior_factor == 1.10
+    assert rust_trace.kept is True
+    assert rust_trace.drop_reason is None
+    assert rust_kept is True
+    assert rust_det.confidence == rust_trace.final_confidence
+
+    # leak: NOT in hull allowlist, gets demoted by 0.4, dropped
+    assert leak_trace.allowed_in_zone is False
+    assert leak_trace.allowlist_factor == 0.4
+    assert leak_trace.kept is False
+    assert leak_trace.drop_reason == DROP_BELOW_THRESHOLD
+    assert leak_kept is False
+
+
+def test_describe_returns_config_snapshot():
+    h = InferenceHarness(HarnessConfig(
+        calibration_T=1.5,
+        default_threshold=0.3,
+        zone_thresholds={"hull": {}, "deck": {}},
+        zone_allowed={"hull": ["rust"]},
+        vessel_type_modifiers={"bulk": {}, "tanker": {}},
+    ))
+    info = h.describe()
+    assert info["calibration_T"] == 1.5
+    assert info["default_threshold"] == 0.3
+    assert info["zones_with_thresholds"] == ["deck", "hull"]
+    assert info["zones_with_allowlist"] == ["hull"]
+    assert info["vessel_types"] == ["bulk", "tanker"]
+
+
+def test_trace_threshold_zone_key_falls_back_to_default():
+    h = InferenceHarness(HarnessConfig(
+        zone_thresholds={"hull": {"rust": 0.10}, "default": {"rust": 0.40}},
+    ))
+    # Unknown zone → trace must reflect 'default' bucket
+    out = h.process_with_traces(
+        [_det("rust", 0.50)],
+        HarnessContext(zone="unknown_zone"),
+    )
+    _, trace, _ = out[0]
+    assert trace.threshold_zone_key == "default"
+    assert trace.threshold_applied == 0.40
